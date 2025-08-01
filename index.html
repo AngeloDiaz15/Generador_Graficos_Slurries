@@ -56,6 +56,7 @@
         const regex_conc = /,2,\d{1,3},Percent/g;
         const regex_dens = /,1,kg\/m3,1,\d+(\.\d+)?/g;
         const regex_visco = /,-1,None,0\.001498177,0/g;
+        const regex_autoTransfer = /Auto Transfer Results= 0/g;
 
         let tabla = '<h3>Resultados calculados:</h3><table><tr><th>%SS</th><th>Densidad Mezcla (kg/m³)</th><th>Conc. Volumen</th><th>Viscosidad (Pa·s)</th></tr>';
 
@@ -70,6 +71,7 @@
           let modificado = contenidoOriginal.replaceAll(regex_conc, `,2,${ss},Percent`);
           modificado = modificado.replaceAll(regex_dens, `,1,kg/m3,1,${densidadSolido}`);
           modificado = modificado.replaceAll(regex_visco, `,-1,None,${viscosidad.toFixed(9)},0`);
+          modificado = modificado.replaceAll(regex_autoTransfer, 'Auto Transfer Results= 1');
 
           zip.file(`modelo_${ss}.fth`, modificado);
         }
