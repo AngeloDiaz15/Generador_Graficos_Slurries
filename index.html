@@ -23,10 +23,10 @@
       reader.onload = function(event) {
         const contenido = event.target.result;
         const zip = new JSZip();
-        const regex = /,[0-9]{1,3},Percent/;
+        const regex = /,\d{1,3},Percent/g; // Modificado: ahora reemplaza TODAS las apariciones
 
         for (let ss = 5; ss <= 60; ss += 5) {
-          const nuevoContenido = contenido.replace(regex, `,${ss},Percent`);
+          const nuevoContenido = contenido.replaceAll(regex, `,${ss},Percent`);
           zip.file(`modelo_${ss}.fth`, nuevoContenido);
         }
 
@@ -45,4 +45,5 @@
   </script>
 </body>
 </html>
+
 
