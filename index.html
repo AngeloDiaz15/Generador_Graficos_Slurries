@@ -119,59 +119,110 @@
       };
       reader.readAsText(input.files[0]);
     }
+</script>
 
-    function generarResumen() {
-      const input = document.getElementById('archivosXLSX');
-      if (!input.files.length) return alert('Selecciona archivos .xlsx generados por Fathom.');
+<br><br>
+<hr>
+<h3>Generar resumen desde resultados</h3>
+<input type="file" id="archivosXLSX" multiple accept=".xlsx"><br><br>
+<button onclick="generarResumen()">Generar resumen desde resultados</button><br><br>
+<a id="descargarResumen" style="display:none;">Descargar Resumen.xlsx</a>
+<div id="tablaResumen" style="margin-top:20px;"></div>
 
-      const tablaResumen = document.getElementById('tablaResumen');
-      let datosCombinados = [["%SS", "Pipe", "P In (bar)", "P Out (bar)", "Velocity", "Vsettle Max", "Vm/Vsm", "Mass Flow", "Vol Flow"]];
-      let tablaHTML = '<table><tr><th>%SS</th><th>Pipe</th><th>P In</th><th>P Out</th><th>Velocity</th><th>Vsettle Max</th><th>Vm/Vsm</th><th>Mass Flow</th><th>Vol Flow</th></tr>';
+<script>
+  function generarResumen() {
+    const input = document.getElementById('archivosXLSX');
+    const archivos = input.files;
+    if (!archivos.length) {
+      alert("Por favor selecciona los archivos .xlsx exportados por Fathom.");
+      return;
+    }
 
-      let archivosProcesados = 0;
-      Array.from(input.files).forEach(file => {
-        const reader = new FileReader();
-        reader.onload = e => {
-          const workbook = XLSX.read(e.target.result, { type: 'binary' });
-          const hoja = workbook.SheetNames[2];
-          const data = XLSX.utils.sheet_to_json(workbook.Sheets[hoja], { header: 1 });
+    const columnas = ["Tubería", "P Static In", "P Static Out", "Velocity", "Settling V Max", "Vm/Vsm", "Mass Flow", "Vol Flow", "%SS"];
+    const resumenDatos = [columnas];
+    let tablaHTML = '<h3>Resumen combinado:</h3><table><tr>' + columnas.map(c => `<th>${c}</th>`).join('') + '</tr>';
 
-          const ss = parseInt(file.name.match(/(\d+)(?=\.xlsx$)/)?.[0] || 0);
-          const A = data.slice(2).map(r => r[0]).filter(v => v != null);
-          const E = data.slice(2).map(r => r[4]).filter(v => v != null);
-          const F = data.slice(2).map(r => r[5]).filter(v => v != null);
-          const G = data.slice(2).map(r => r[6]).filter(v => v != null);
-          const J = data.slice(2).map(r => r[9]).filter(v => v != null);
-          const K = data.slice(2).map(r => r[10]).filter(v => v != null);
-          const M = data.slice(2).map(r => r[12]).filter(v => v != null);
-          const N = data.slice(2).map(r => r[13]).filter(v => v != null);
+    const leerExcel = (archivo, callback) => {
+      const reader = new FileReader();
+      reader.onload = e => {
+        const data = new Uint8Array(e.target.result);
+        const wb = XLSX.read(data, { type: 'array' });
+        const sheet = wb.Sheets[wb.SheetNames[2]]; // Tercera hoja (Sheet1)
+        const nombre = archivo.name;
+        const ssMatch = nombre.match(/(\d+)\D*\.xlsx$/);
+        const ss = ssMatch ? parseInt(ssMatch[1]) : "N/A";
 
-          for (let i = 0; i < A.length; i++) {
-            datosCombinados.push([ss, A[i], M[i], N[i], E[i], F[i], G[i], J[i], K[i]]);
-            tablaHTML += `<tr><td>${ss}</td><td>${A[i]}</td><td>${M[i]}</td><td>${N[i]}</td><td>${E[i]}</td><td>${F[i]}</td><td>${G[i]}</td><td>${J[i]}</td><td>${K[i]}</td></tr>`;
+        const colA = XLSX.utils.sheet_to_json(sheet, { header: 1, range: "A2:A1000", blankrows: false }).map(r => r[0]).filter(Boolean);
+        const colM = XLSX.utils.sheet_to_json(sheet, { header: 1, range: "M2:M1000", blankrows: false }).map(r => r[0]);
+        const colN = XLSX.utils.sheet_to_json(sheet, { header: 1, range: "N2:N1000", blankrows: false }).map(r => r[0]);
+
+        const extraerDesdeBloque = (col) => {
+          let vacios = 0, index = 0;
+          while (index < col.length && vacios < 3) {
+            if (col[index] === undefined || col[index] === "") {
+              vacios++;
+              while (index < col.length && (col[index] === undefined || col[index] === "")) index++;
+            } else index++;
           }
-
-          archivosProcesados++;
-          if (archivosProcesados === input.files.length) {
-            tablaHTML += '</table>';
-            tablaResumen.innerHTML = tablaHTML;
-
-            const wb = XLSX.utils.book_new();
-            const ws = XLSX.utils.aoa_to_sheet(datosCombinados);
-            XLSX.utils.book_append_sheet(wb, ws, "Resumen");
-            const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-            const blobResumen = new Blob([wbout], { type: 'application/octet-stream' });
-
-            const link = document.getElementById('descargarResumen');
-            link.href = URL.createObjectURL(blobResumen);
-            link.download = 'Resumen.xlsx';
-            link.textContent = 'Descargar Resumen.xlsx';
-            link.style.display = 'inline';
+          const inicio = index;
+          const valores = [];
+          while (index < col.length && col[index] !== undefined && col[index] !== "") {
+            valores.push(col[index]);
+            index++;
           }
+          return valores;
         };
-        reader.readAsBinaryString(file);
+
+        const colE = extraerDesdeBloque(XLSX.utils.sheet_to_json(sheet, { header: 1, range: "E1:E1000", blankrows: false }).map(r => r[0]));
+        const colF = extraerDesdeBloque(XLSX.utils.sheet_to_json(sheet, { header: 1, range: "F1:F1000", blankrows: false }).map(r => r[0]));
+        const colG = extraerDesdeBloque(XLSX.utils.sheet_to_json(sheet, { header: 1, range: "G1:G1000", blankrows: false }).map(r => r[0]));
+        const colJ = extraerDesdeBloque(XLSX.utils.sheet_to_json(sheet, { header: 1, range: "J1:J1000", blankrows: false }).map(r => r[0]));
+        const colK = extraerDesdeBloque(XLSX.utils.sheet_to_json(sheet, { header: 1, range: "K1:K1000", blankrows: false }).map(r => r[0]));
+
+        const n = Math.min(colA.length, colM.length, colN.length, colE.length, colF.length, colG.length, colJ.length, colK.length);
+        for (let i = 0; i < n; i++) {
+          const fila = [
+            colA[i] ?? "",
+            colM[i] ?? "",
+            colN[i] ?? "",
+            colE[i] ?? "",
+            colF[i] ?? "",
+            colG[i] ?? "",
+            colJ[i] ?? "",
+            colK[i] ?? "",
+            ss
+          ];
+          resumenDatos.push(fila);
+          tablaHTML += '<tr>' + fila.map(v => `<td>${v}</td>`).join('') + '</tr>';
+        }
+        callback();
+      };
+      reader.readAsArrayBuffer(archivo);
+    };
+
+    let archivosProcesados = 0;
+    for (const archivo of archivos) {
+      leerExcel(archivo, () => {
+        archivosProcesados++;
+        if (archivosProcesados === archivos.length) {
+          tablaHTML += '</table>';
+          document.getElementById('tablaResumen').innerHTML = tablaHTML;
+
+          const wb = XLSX.utils.book_new();
+          const ws = XLSX.utils.aoa_to_sheet(resumenDatos);
+          XLSX.utils.book_append_sheet(wb, ws, "Resumen");
+          const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+          const blob = new Blob([wbout], { type: 'application/octet-stream' });
+          const link = document.getElementById('descargarResumen');
+          link.href = URL.createObjectURL(blob);
+          link.download = 'Resumen.xlsx';
+          link.textContent = 'Descargar Resumen.xlsx';
+          link.style.display = 'inline';
+        }
       });
     }
-  </script>
+  }
+</script>
 </body>
 </html>
+
