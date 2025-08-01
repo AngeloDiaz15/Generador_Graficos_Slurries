@@ -147,49 +147,50 @@
       reader.onload = e => {
         const data = new Uint8Array(e.target.result);
         const wb = XLSX.read(data, { type: 'array' });
-        const sheet = wb.Sheets[wb.SheetNames[2]]; // Tercera hoja (Sheet1)
+        const sheet = wb.Sheets["Sheet1"]; // tercera hoja
+
         const nombre = archivo.name;
         const ssMatch = nombre.match(/(\d+)\D*\.xlsx$/);
         const ss = ssMatch ? parseInt(ssMatch[1]) : "N/A";
 
-        const colA = XLSX.utils.sheet_to_json(sheet, { header: 1, range: "A2:A1000", blankrows: false }).map(r => r[0]).filter(Boolean);
-        const colM = XLSX.utils.sheet_to_json(sheet, { header: 1, range: "M2:M1000", blankrows: false }).map(r => r[0]);
-        const colN = XLSX.utils.sheet_to_json(sheet, { header: 1, range: "N2:N1000", blankrows: false }).map(r => r[0]);
-
-        const extraerDesdeBloque = (col) => {
-          let vacios = 0, index = 0;
-          while (index < col.length && vacios < 3) {
-            if (col[index] === undefined || col[index] === "") {
-              vacios++;
-              while (index < col.length && (col[index] === undefined || col[index] === "")) index++;
-            } else index++;
+        const obtenerIndicesPipe = (col) => {
+          const indices = [];
+          for (let i = 0; i < col.length; i++) {
+            if (typeof col[i] === 'string' && /^P\d+/.test(col[i])) {
+              indices.push(i);
+            }
           }
-          const inicio = index;
-          const valores = [];
-          while (index < col.length && col[index] !== undefined && col[index] !== "") {
-            valores.push(col[index]);
-            index++;
-          }
-          return valores;
+          return indices;
         };
 
-        const colE = extraerDesdeBloque(XLSX.utils.sheet_to_json(sheet, { header: 1, range: "E1:E1000", blankrows: false }).map(r => r[0]));
-        const colF = extraerDesdeBloque(XLSX.utils.sheet_to_json(sheet, { header: 1, range: "F1:F1000", blankrows: false }).map(r => r[0]));
-        const colG = extraerDesdeBloque(XLSX.utils.sheet_to_json(sheet, { header: 1, range: "G1:G1000", blankrows: false }).map(r => r[0]));
-        const colJ = extraerDesdeBloque(XLSX.utils.sheet_to_json(sheet, { header: 1, range: "J1:J1000", blankrows: false }).map(r => r[0]));
-        const colK = extraerDesdeBloque(XLSX.utils.sheet_to_json(sheet, { header: 1, range: "K1:K1000", blankrows: false }).map(r => r[0]));
+        const colA = XLSX.utils.sheet_to_json(sheet, { header: 1, range: "A1:A1000" }).map(r => r[0]);
+        const indicesP = obtenerIndicesPipe(colA);
 
-        const n = Math.min(colA.length, colM.length, colN.length, colE.length, colF.length, colG.length, colJ.length, colK.length);
+        if (indicesP.length === 0) return callback(); // no hay tuberías
+
+        const primerBloque = indicesP.slice(0, 20); // primer bloque
+        const segundoBloque = indicesP.slice(20);   // segundo bloque
+
+        const leerCol = (letra, indices) => {
+          const col = XLSX.utils.sheet_to_json(sheet, { header: 1, range: `${letra}1:${letra}1000` }).map(r => r[0]);
+          return indices.map(i => col[i] ?? "");
+        };
+
+        const tuberias = primerBloque.map(i => colA[i]);
+        const colM = leerCol("M", primerBloque);
+        const colN = leerCol("N", primerBloque);
+
+        const colE = leerCol("E", segundoBloque);
+        const colF = leerCol("F", segundoBloque);
+        const colG = leerCol("G", segundoBloque);
+        const colJ = leerCol("J", segundoBloque);
+        const colK = leerCol("K", segundoBloque);
+
+        const n = Math.min(tuberias.length, colM.length, colN.length, colE.length, colF.length, colG.length, colJ.length, colK.length);
         for (let i = 0; i < n; i++) {
           const fila = [
-            colA[i] ?? "",
-            colM[i] ?? "",
-            colN[i] ?? "",
-            colE[i] ?? "",
-            colF[i] ?? "",
-            colG[i] ?? "",
-            colJ[i] ?? "",
-            colK[i] ?? "",
+            tuberias[i], colM[i], colN[i],
+            colE[i], colF[i], colG[i], colJ[i], colK[i],
             ss
           ];
           resumenDatos.push(fila);
@@ -223,6 +224,7 @@
     }
   }
 </script>
+
 </body>
 </html>
 
