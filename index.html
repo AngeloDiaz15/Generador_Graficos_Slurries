@@ -23,8 +23,12 @@
   <label for="densidad">Densidad del sólido (kg/m³):</label>
   <input type="number" id="densidad" value="8900" min="1"><br><br>
 
+  <label for="rutaFathom">Ruta de AFT Fathom (Fathom.exe):</label><br>
+  <input type="text" id="rutaFathom" placeholder="C:\\Program Files (x86)\\AFT Products\\AFT Fathom 12\\Fathom.exe" style="width: 500px;"><br><br>
+
   <button onclick="generarArchivos()">Generar archivos</button><br><br>
-  <a id="descargarZip" style="display:none;">Descargar archivos .zip</a>
+  <a id="descargarZip" style="display:none;">Descargar modelos_generados.zip</a><br><br>
+  <a id="descargarBat" style="display:none;">Descargar ejecutar_modelos.bat</a>
 
   <div id="tablaResultados" style="margin-top:20px;"></div>
 
@@ -35,6 +39,7 @@
       const hasta = parseInt(document.getElementById('fin').value);
       const densidadSolido = parseFloat(document.getElementById('densidad').value);
       const densidadAgua = 1000;
+      const rutaFathom = document.getElementById('rutaFathom').value.trim();
 
       if (!input.files[0]) {
         alert('Por favor, sube un archivo .fth primero');
@@ -46,6 +51,10 @@
       }
       if (!densidadSolido || isNaN(densidadSolido)) {
         alert('Por favor, ingresa un valor válido de densidad del sólido.');
+        return;
+      }
+      if (!rutaFathom) {
+        alert('Por favor, escribe la ruta de AFT Fathom.');
         return;
       }
 
@@ -60,6 +69,8 @@
 
         let tabla = '<h3>Resultados calculados:</h3><table><tr><th>%SS</th><th>Densidad Mezcla (kg/m³)</th><th>Conc. Volumen</th><th>Viscosidad (Pa·s)</th></tr>';
 
+        let nombres = [];
+
         for (let ss = desde; ss <= hasta; ss += 5) {
           const fraccionMasa = ss / 100;
           const densidadMezcla = 1 / ((fraccionMasa / densidadSolido) + ((1 - fraccionMasa) / densidadAgua));
@@ -73,7 +84,9 @@
           modificado = modificado.replaceAll(regex_visco, `,-1,None,${viscosidad.toFixed(9)},0`);
           modificado = modificado.replaceAll(regex_autoTransfer, 'Auto Transfer Results= 1');
 
-          zip.file(`modelo_${ss}.fth`, modificado);
+          const nombre = `modelo_${ss}`;
+          nombres.push(nombre);
+          zip.file(`${nombre}.fth`, modificado);
         }
 
         tabla += '</table>';
@@ -87,6 +100,16 @@
             enlace.textContent = 'Descargar modelos_generados.zip';
             enlace.style.display = 'inline';
           });
+
+        // Crear contenido .bat
+        let bat = `@echo off\nsetlocal enabledelayedexpansion\n\n:: === Ruta a AFT Fathom ===\nset FATHOM_PATH=\"${rutaFathom}\"\n\n:: === Carpeta donde están los modelos .fth ===\nset MODELS_DIR=\"%~dp0modelos_generados\"\n\n:: === Crear carpeta de salida de resultados ===\nset OUTPUT_DIR=\"%~dp0resultados_exportados\"\nif not exist %OUTPUT_DIR% (\n    mkdir %OUTPUT_DIR%\n)\n\necho Ejecutando modelos...\n\n:: === Recorrer cada archivo .fth ===\nfor %%f in (%MODELS_DIR%\\*.fth) do (\n    echo Procesando %%~nxf...\n    %FATHOM_PATH% \"%%f\" /Run /ExportOutput \"%OUTPUT_DIR%\\%%~nf.xlsx\"\n)\n\necho.\necho ✅ Todos los modelos han sido ejecutados y exportados.\npause\n`;
+
+        const blobBat = new Blob([bat], { type: 'text/plain' });
+        const batLink = document.getElementById('descargarBat');
+        batLink.href = URL.createObjectURL(blobBat);
+        batLink.download = 'ejecutar_modelos.bat';
+        batLink.textContent = 'Descargar ejecutar_modelos.bat';
+        batLink.style.display = 'inline';
       };
 
       reader.readAsText(input.files[0]);
@@ -94,3 +117,4 @@
   </script>
 </body>
 </html>
+
