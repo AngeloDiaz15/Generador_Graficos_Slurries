@@ -159,7 +159,6 @@ function generarResumen() {
       const colN = getCol("N");
       const colE = getCol("E");
       const colF = getCol("F");
-      const colG = getCol("G");
       const colJ = getCol("J");
       const colK = getCol("K");
 
@@ -180,17 +179,24 @@ function generarResumen() {
         const idxInOut = idxs[0];
         const idxOtros = idxs[1];
 
+        const velocity = colE[idxOtros + 2] ?? null;
+        const settlingV = colF[idxOtros + 2] ?? null;
+        const vmvsm = (velocity !== null && settlingV !== null && settlingV !== 0)
+          ? (velocity / settlingV).toFixed(4)
+          : "";
+
         const fila = [
           tub,
           colM[idxInOut] ?? "",
           colN[idxInOut] ?? "",
-          colE[idxOtros +2] ?? "",
-          colF[idxOtros +2] ?? "",
-          colG[idxOtros +1] ?? "",
-          colJ[idxOtros +2] ?? "",
-          colK[idxOtros +2] ?? "",
+          velocity ?? "",
+          settlingV ?? "",
+          vmvsm,
+          colJ[idxOtros + 2] ?? "",
+          colK[idxOtros + 2] ?? "",
           ss
         ];
+
         resumenDatos.push(fila);
         tablaHTML += '<tr>' + fila.map(v => `<td>${v}</td>`).join('') + '</tr>';
       }
@@ -223,6 +229,7 @@ function generarResumen() {
   }
 }
 </script>
+
 
   
 
