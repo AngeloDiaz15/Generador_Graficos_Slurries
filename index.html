@@ -30,85 +30,213 @@
   <button onclick="generarArchivos()">Generar archivos</button><br><br>
   <a id="descargarZip" style="display:none;">Descargar modelos_generados.zip</a><br><br>
   <a id="descargarBat" style="display:none;">Descargar ejecutar_modelos.bat</a><br><br>
-  <a id="descargarXLSX" style="display:none;">Descargar tabla_resultados.xlsx</a><br><br>
-
-  <input type="file" id="resumenInput" multiple accept=".xlsx">
-  <button onclick="generarResumenDesdeResultados()">Generar resumen desde resultados</button><br><br>
-  <a id="descargarResumen" style="display:none;">Descargar Resumen.xlsx</a><br><br>
+  <a id="descargarXLSX" style="display:none;">Descargar tabla_resultados.xlsx</a>
 
   <div id="tablaResultados" style="margin-top:20px;"></div>
-  <div id="tablaResumen" style="margin-top:20px;"></div>
 
   <script>
-    // función generarArchivos() ya definida aquí
+    function generarArchivos() {
+      const input = document.getElementById('fileInput');
+      const desde = parseInt(document.getElementById('inicio').value);
+      const hasta = parseInt(document.getElementById('fin').value);
+      const densidadSolido = parseFloat(document.getElementById('densidad').value);
+      const densidadAgua = 1000;
+      const rutaFathom = document.getElementById('rutaFathom').value.trim();
 
-    async function generarResumenDesdeResultados() {
-      const input = document.getElementById('resumenInput');
-      if (!input.files.length) {
-        alert('Por favor selecciona uno o más archivos .xlsx exportados por Fathom.');
+      if (!input.files[0]) {
+        alert('Por favor, sube un archivo .fth primero');
+        return;
+      }
+      if (desde < 1 || hasta > 100 || desde > hasta) {
+        alert('Rango inválido. Asegúrate de que el rango esté entre 1% y 100% y que el inicio no sea mayor al final.');
+        return;
+      }
+      if (!densidadSolido || isNaN(densidadSolido)) {
+        alert('Por favor, ingresa un valor válido de densidad del sólido.');
+        return;
+      }
+      if (!rutaFathom) {
+        alert('Por favor, escribe la ruta de AFT Fathom.');
         return;
       }
 
-      const resumen = [["Tubería", "P In (bar)", "P Out (bar)", "Velocidad (m/s)", "Vm/Vsm", "Settling Velocity Max", "Mass Flow Rate", "Vol Flow Slurry", "%SS"]];
+      const reader = new FileReader();
+      reader.onload = function(event) {
+        const contenidoOriginal = event.target.result;
+        const zip = new JSZip();
+        const regex_conc = /,2,\d{1,3},Percent/g;
+        const regex_dens = /,1,kg\/m3,1,\d+(\.\d+)?/g;
+        const regex_visco = /,-1,None,0\.001498177,0/g;
+        const regex_autoTransfer = /Auto Transfer Results= 0/g;
 
-      for (const file of input.files) {
-        const arrayBuffer = await file.arrayBuffer();
-        const workbook = XLSX.read(arrayBuffer, { type: 'array' });
-        const nombre = file.name;
-        const porcentaje = parseInt(nombre.match(/(\d+)(?=\.xlsx)/)?.[1] || 0);
+        let tabla = '<h3>Resultados calculados:</h3><table><tr><th>%SS</th><th>Densidad Mezcla (kg/m³)</th><th>Conc. Volumen</th><th>Viscosidad (Pa·s)</th></tr>';
+        const datosExcel = [["%SS", "Densidad Mezcla (kg/m³)", "Conc. Volumen", "Viscosidad (Pa·s)"]];
 
-        const sheet = workbook.Sheets[workbook.SheetNames[2]]; // tercera hoja
-        if (!sheet) continue;
+        let nombres = [];
 
-        const col = (l) => XLSX.utils.sheet_to_json(sheet, { header: 1, range: `${l}1:${l}1000`, blankrows: false }).flat();
-        const fromTo = (arr, start) => {
-          const s = arr.findIndex((v, i) => i >= start && (v === undefined || v === null || v === "")) + 1;
-          const e = arr.findIndex((v, i) => i >= s && (v === undefined || v === null || v === ""));
-          return arr.slice(s, e);
-        };
+        for (let ss = desde; ss <= hasta; ss += 5) {
+          const fraccionMasa = ss / 100;
+          const densidadMezcla = 1 / ((fraccionMasa / densidadSolido) + ((1 - fraccionMasa) / densidadAgua));
+          const concVolumen = densidadMezcla * (fraccionMasa / densidadSolido);
+          const viscosidad = 0.001 * (1 + (2.5 * concVolumen) + (12.075 * Math.pow(concVolumen, 2)) + (0.00273 * Math.exp(16.6 * concVolumen)));
 
-        const tuberias = col('A').filter(x => x);
-        const pIn = col('M').slice(0, tuberias.length);
-        const pOut = col('N').slice(0, tuberias.length);
-        const vel = fromTo(col('E'), 0);
-        const svmax = fromTo(col('F'), 0);
-        const vmvsm = fromTo(col('G'), 0);
-        const mfr = fromTo(col('J'), 0);
-        const vfs = fromTo(col('K'), 0);
+          tabla += `<tr><td>${ss}</td><td>${densidadMezcla.toFixed(3)}</td><td>${concVolumen.toFixed(5)}</td><td>${viscosidad.toExponential(6)}</td></tr>`;
+          datosExcel.push([ss, parseFloat(densidadMezcla.toFixed(3)), parseFloat(concVolumen.toFixed(5)), parseFloat(viscosidad.toExponential(6))]);
 
-        for (let i = 0; i < tuberias.length; i++) {
-          resumen.push([
-            tuberias[i],
-            parseFloat(pIn[i]),
-            parseFloat(pOut[i]),
-            parseFloat(vel[i]),
-            parseFloat(vmvsm[i]),
-            parseFloat(svmax[i]),
-            parseFloat(mfr[i]),
-            parseFloat(vfs[i]),
-            porcentaje
-          ]);
+          let modificado = contenidoOriginal.replaceAll(regex_conc, `,2,${ss},Percent`);
+          modificado = modificado.replaceAll(regex_dens, `,1,kg/m3,1,${densidadSolido}`);
+          modificado = modificado.replaceAll(regex_visco, `,-1,None,${viscosidad.toFixed(9)},0`);
+          modificado = modificado.replaceAll(regex_autoTransfer, 'Auto Transfer Results= 1');
+
+          const nombre = `modelo_${ss}`;
+          nombres.push(nombre);
+          zip.file(`${nombre}.fth`, modificado);
         }
-      }
 
-      const tabla = document.createElement('table');
-      tabla.innerHTML = `<tr>${resumen[0].map(h => `<th>${h}</th>`).join('')}</tr>` +
-        resumen.slice(1).map(row => `<tr>${row.map(val => `<td>${val}</td>`).join('')}</tr>`).join('');
-      document.getElementById('tablaResumen').innerHTML = '<h3>Resumen combinado:</h3>';
-      document.getElementById('tablaResumen').appendChild(tabla);
+        tabla += '</table>';
+        document.getElementById('tablaResultados').innerHTML = tabla;
 
-      const wb = XLSX.utils.book_new();
-      const ws = XLSX.utils.aoa_to_sheet(resumen);
-      XLSX.utils.book_append_sheet(wb, ws, "Resumen");
-      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-      const blob = new Blob([wbout], { type: 'application/octet-stream' });
-      const link = document.getElementById('descargarResumen');
-      link.href = URL.createObjectURL(blob);
-      link.download = 'Resumen.xlsx';
-      link.textContent = 'Descargar Resumen.xlsx';
-      link.style.display = 'inline';
+        zip.generateAsync({ type: 'blob' })
+          .then(function(content) {
+            const enlace = document.getElementById('descargarZip');
+            enlace.href = URL.createObjectURL(content);
+            enlace.download = 'modelos_generados.zip';
+            enlace.textContent = 'Descargar modelos_generados.zip';
+            enlace.style.display = 'inline';
+          });
+
+        // Crear contenido .bat
+        let bat = `@echo off\nsetlocal enabledelayedexpansion\n\n:: === Ruta a AFT Fathom ===\nset FATHOM_PATH=\"${rutaFathom}\"\n\n:: === Carpeta donde están los modelos .fth ===\nset MODELS_DIR=\"%~dp0modelos_generados\"\n\n:: === Crear carpeta de salida de resultados ===\nset OUTPUT_DIR=\"%~dp0resultados_exportados\"\nif not exist %OUTPUT_DIR% (\n    mkdir %OUTPUT_DIR%\n)\n\necho Ejecutando modelos...\n\n:: === Recorrer cada archivo .fth ===\nfor %%f in (%MODELS_DIR%\\*.fth) do (\n    echo Procesando %%~nxf...\n    %FATHOM_PATH% \"%%f\" /Run /ExportOutput \"%OUTPUT_DIR%\\%%~nf.xlsx\"\n)\n\necho.\necho ✅ Todos los modelos han sido ejecutados y exportados.\npause\n`;
+
+        const blobBat = new Blob([bat], { type: 'text/plain' });
+        const batLink = document.getElementById('descargarBat');
+        batLink.href = URL.createObjectURL(blobBat);
+        batLink.download = 'ejecutar_modelos.bat';
+        batLink.textContent = 'Descargar ejecutar_modelos.bat';
+        batLink.style.display = 'inline';
+
+        // Crear Excel
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet(datosExcel);
+        XLSX.utils.book_append_sheet(wb, ws, "Resultados");
+        const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+        const blobExcel = new Blob([wbout], { type: 'application/octet-stream' });
+        const excelLink = document.getElementById('descargarXLSX');
+        excelLink.href = URL.createObjectURL(blobExcel);
+        excelLink.download = 'tabla_resultados.xlsx';
+        excelLink.textContent = 'Descargar tabla_resultados.xlsx';
+        excelLink.style.display = 'inline';
+      };
+
+      reader.readAsText(input.files[0]);
     }
   </script>
+
+<br>
+<hr>
+<h2>Generar Resumen desde resultados .xlsx</h2>
+<input type="file" id="resultadosInput" multiple accept=".xlsx"><br><br>
+<button onclick="generarResumen()">Generar resumen desde resultados</button>
+<br><br>
+<a id="descargarResumen" style="display:none;">Descargar Resumen.xlsx</a>
+<div id="tablaResumen" style="margin-top:20px;"></div>
+
+<script>
+function generarResumen() {
+  const input = document.getElementById('resultadosInput');
+  if (!input.files.length) {
+    alert('Por favor, selecciona los archivos .xlsx exportados por AFT Fathom.');
+    return;
+  }
+
+  const resumen = [["%SS", "Tuberia", "P Static In", "P Static Out", "Velocity", "Settling Velocity Max", "Vm/Vsm", "Mass Flow Rate", "Vol Flow Slurry"]];
+  let tablaHTML = '<h3>Resumen combinado:</h3><table><tr><th>%SS</th><th>Tuberia</th><th>P Static In</th><th>P Static Out</th><th>Velocity</th><th>Settling Velocity Max</th><th>Vm/Vsm</th><th>Mass Flow Rate</th><th>Vol Flow Slurry</th></tr>';
+
+  let pendientes = input.files.length;
+
+  for (const file of input.files) {
+    const lector = new FileReader();
+    lector.onload = function (e) {
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, { type: 'array' });
+      const hoja3 = workbook.SheetNames[2];
+      const ws = workbook.Sheets[hoja3];
+      if (!ws) {
+        alert(`El archivo ${file.name} no tiene una tercera hoja.`);
+        return;
+      }
+
+      const getCol = (col) => {
+        const colData = [];
+        let i = 1;
+        while (ws[col + i]) {
+          colData.push(ws[col + i].v);
+          i++;
+        }
+        return colData;
+      };
+
+      const getColAfterEmpty = (col) => {
+        let i = 1;
+        while (ws[col + i] && ws[col + i].v !== "") i++;
+        i++;
+        const result = [];
+        while (ws[col + i] && ws[col + i].v !== "") {
+          result.push(ws[col + i].v);
+          i++;
+        }
+        return result;
+      };
+
+      const tuberias = getCol("A");
+      const psi = getCol("M");
+      const pso = getCol("N");
+      const velocity = getColAfterEmpty("E");
+      const svmax = getColAfterEmpty("F");
+      const vmvsm = getColAfterEmpty("G");
+      const mfr = getColAfterEmpty("J");
+      const vfs = getColAfterEmpty("K");
+
+      const ss = parseInt(file.name.match(/modelo_(\d+)/)?.[1] || 0);
+      for (let i = 0; i < tuberias.length; i++) {
+        resumen.push([
+          ss,
+          tuberias[i] || '',
+          psi[i] || '',
+          pso[i] || '',
+          velocity[i] || '',
+          svmax[i] || '',
+          vmvsm[i] || '',
+          mfr[i] || '',
+          vfs[i] || ''
+        ]);
+
+        tablaHTML += `<tr><td>${ss}</td><td>${tuberias[i] || ''}</td><td>${psi[i] || ''}</td><td>${pso[i] || ''}</td><td>${velocity[i] || ''}</td><td>${svmax[i] || ''}</td><td>${vmvsm[i] || ''}</td><td>${mfr[i] || ''}</td><td>${vfs[i] || ''}</td></tr>`;
+      }
+
+      pendientes--;
+      if (pendientes === 0) {
+        // Mostrar tabla
+        tablaHTML += '</table>';
+        document.getElementById('tablaResumen').innerHTML = tablaHTML;
+
+        // Descargar Excel
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet(resumen);
+        XLSX.utils.book_append_sheet(wb, ws, "Resumen");
+        const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+        const blobResumen = new Blob([wbout], { type: 'application/octet-stream' });
+        const resumenLink = document.getElementById('descargarResumen');
+        resumenLink.href = URL.createObjectURL(blobResumen);
+        resumenLink.download = 'Resumen.xlsx';
+        resumenLink.textContent = 'Descargar Resumen.xlsx';
+        resumenLink.style.display = 'inline';
+      }
+    };
+    lector.readAsArrayBuffer(file);
+  }
+}
+</script>
+  
 </body>
 </html>
-
