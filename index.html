@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <title>Generador de Archivos .fth</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.0/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
     table, th, td { border: 1px solid black; border-collapse: collapse; padding: 5px; }
     th { background-color: #f2f2f2; }
@@ -28,7 +29,8 @@
 
   <button onclick="generarArchivos()">Generar archivos</button><br><br>
   <a id="descargarZip" style="display:none;">Descargar modelos_generados.zip</a><br><br>
-  <a id="descargarBat" style="display:none;">Descargar ejecutar_modelos.bat</a>
+  <a id="descargarBat" style="display:none;">Descargar ejecutar_modelos.bat</a><br><br>
+  <a id="descargarXLSX" style="display:none;">Descargar tabla_resultados.xlsx</a>
 
   <div id="tablaResultados" style="margin-top:20px;"></div>
 
@@ -68,6 +70,7 @@
         const regex_autoTransfer = /Auto Transfer Results= 0/g;
 
         let tabla = '<h3>Resultados calculados:</h3><table><tr><th>%SS</th><th>Densidad Mezcla (kg/m³)</th><th>Conc. Volumen</th><th>Viscosidad (Pa·s)</th></tr>';
+        const datosExcel = [["%SS", "Densidad Mezcla (kg/m³)", "Conc. Volumen", "Viscosidad (Pa·s)"]];
 
         let nombres = [];
 
@@ -78,6 +81,7 @@
           const viscosidad = 0.001 * (1 + (2.5 * concVolumen) + (12.075 * Math.pow(concVolumen, 2)) + (0.00273 * Math.exp(16.6 * concVolumen)));
 
           tabla += `<tr><td>${ss}</td><td>${densidadMezcla.toFixed(3)}</td><td>${concVolumen.toFixed(5)}</td><td>${viscosidad.toExponential(6)}</td></tr>`;
+          datosExcel.push([ss, parseFloat(densidadMezcla.toFixed(3)), parseFloat(concVolumen.toFixed(5)), parseFloat(viscosidad.toExponential(6))]);
 
           let modificado = contenidoOriginal.replaceAll(regex_conc, `,2,${ss},Percent`);
           modificado = modificado.replaceAll(regex_dens, `,1,kg/m3,1,${densidadSolido}`);
@@ -110,6 +114,18 @@
         batLink.download = 'ejecutar_modelos.bat';
         batLink.textContent = 'Descargar ejecutar_modelos.bat';
         batLink.style.display = 'inline';
+
+        // Crear Excel
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet(datosExcel);
+        XLSX.utils.book_append_sheet(wb, ws, "Resultados");
+        const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+        const blobExcel = new Blob([wbout], { type: 'application/octet-stream' });
+        const excelLink = document.getElementById('descargarXLSX');
+        excelLink.href = URL.createObjectURL(blobExcel);
+        excelLink.download = 'tabla_resultados.xlsx';
+        excelLink.textContent = 'Descargar tabla_resultados.xlsx';
+        excelLink.style.display = 'inline';
       };
 
       reader.readAsText(input.files[0]);
@@ -117,4 +133,3 @@
   </script>
 </body>
 </html>
-
