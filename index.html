@@ -144,8 +144,7 @@ function generarResumen() {
   const columnas = ["Tubería", "P Static In", "P Static Out", "Velocity", "Settling V Max", "Vm/Vsm", "Mass Flow", "Vol Flow", "%SS"];
   const resumenDatos = [columnas];
   resumenDatosGlobal = []; // Reinicia global
-  localStorage.setItem('resumenDatos', JSON.stringify(resumenDatosGlobal));
-
+  
   let tablaHTML = '<h3>Resumen combinado:</h3><table id="tablaResumenHTML"><thead><tr>' +
     columnas.map(c => `<th>${c}</th>`).join('') +
     '</tr></thead><tbody>';
@@ -251,7 +250,7 @@ function generarResumen() {
     });
   }
 }
-
+localStorage.setItem('resumenDatos', JSON.stringify(resumenDatosGlobal));
 function filtrarTablaResumen() {
   const select = document.getElementById('filtroConcentracion');
   const valor = select.value;
