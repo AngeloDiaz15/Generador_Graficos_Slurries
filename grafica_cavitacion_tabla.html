@@ -44,7 +44,7 @@
     <option value="Todas">Todas</option>
   </select>
 
-  <canvas id="graficoSedimentacion"></canvas>
+  <canvas id="graficoCavitacion"></canvas>
 
   <div id="mensajes"></div>
 
@@ -76,7 +76,7 @@
       select.appendChild(opt);
     });
 
-    const ctx = document.getElementById('graficoSedimentacion').getContext('2d');
+    const ctx = document.getElementById('graficoCavitacion').getContext('2d');
     let chart;
 
     function crearGrafico(tuberiasFiltradas) {
