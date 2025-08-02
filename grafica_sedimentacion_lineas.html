@@ -2,98 +2,90 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Comportamiento de Ratio de Sedimentación por Tubería</title>
+  <title>Gráfico de Líneas - Sedimentación</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    body {
-      font-family: sans-serif;
-      padding: 20px;
-    }
     canvas {
-      max-width: 100%;
-      height: 500px;
+      max-width: 90%;
+      margin: 20px auto;
+      display: block;
     }
     select {
-      margin-bottom: 15px;
-      padding: 5px;
-      font-size: 14px;
+      margin: 10px;
     }
   </style>
 </head>
 <body>
-  <h2>Gráfico de Vm/Vsm vs % de Sólidos</h2>
-  <label for="filtroTuberias">Filtrar por tubería:</label>
-  <select id="filtroTuberias" multiple size="6" style="width: 250px;"></select>
-  <br><br>
+  <h2 style="text-align:center;">Ratio de Sedimentación por Tubería</h2>
+
+  <label for="tuberiaSelect">Filtrar por tubería:</label>
+  <select id="tuberiaSelect" onchange="filtrarGrafico()">
+    <option value="todos">Mostrar todas</option>
+  </select>
+
   <canvas id="graficoLineas"></canvas>
 
   <script>
-    // === Obtener datos del localStorage ===
-    const datos = JSON.parse(localStorage.getItem('resumenDatos')) || [];
-
-    // === Extraer tuberías únicas y %SS ordenados ===
-    const tuberias = [...new Set(datos.map(d => d.Tuberia))].sort();
-    const porcentajes = [...new Set(datos.map(d => d.SS))].sort((a, b) => a - b);
-
-    // === Paleta de solo 8 colores (Chart.js reutiliza si hay más) ===
-    const coloresBase = [
-      '#1f77b4', '#ff7f0e', '#2ca02c',
-      '#d62728', '#9467bd', '#8c564b',
-      '#e377c2', '#7f7f7f'
+    const colores = [
+      'rgba(255, 99, 132, 1)',
+      'rgba(54, 162, 235, 1)',
+      'rgba(255, 206, 86, 1)',
+      'rgba(75, 192, 192, 1)',
+      'rgba(153, 102, 255, 1)',
+      'rgba(255, 159, 64, 1)',
+      'rgba(0, 204, 102, 1)',
+      'rgba(255, 0, 255, 1)',
     ];
 
-    // === Crear <select> para filtrar tuberías ===
-    const selectFiltro = document.getElementById('filtroTuberias');
-    tuberias.forEach(tub => {
-      const opt = document.createElement('option');
-      opt.value = tub;
-      opt.text = tub;
-      opt.selected = true;
-      selectFiltro.appendChild(opt);
+    const resumenDatos = JSON.parse(localStorage.getItem('resumenDatos') || '[]');
+    const datosPorTuberia = {};
+
+    resumenDatos.forEach(row => {
+      const tuberia = row[0];
+      const ratio = parseFloat(row[5]);
+      const porcentajeSS = row[8];
+
+      if (!datosPorTuberia[tuberia]) {
+        datosPorTuberia[tuberia] = { x: [], y: [] };
+      }
+
+      datosPorTuberia[tuberia].x.push(porcentajeSS);
+      datosPorTuberia[tuberia].y.push(ratio);
     });
 
-    // === Función para construir datasets según selección ===
-    function construirDatasets(tuberiasSeleccionadas) {
-      return tuberiasSeleccionadas.map((tuberia, i) => {
-        return {
-          label: tuberia,
-          data: porcentajes.map(ss => {
-            const punto = datos.find(d => d.Tuberia === tuberia && d.SS === ss);
-            return punto ? punto.Vm_Vsm : null;
-          }),
-          borderColor: coloresBase[i % coloresBase.length],
-          backgroundColor: coloresBase[i % coloresBase.length],
-          borderWidth: 2,
-          fill: false
-        };
-      });
-    }
+    const tuberias = Object.keys(datosPorTuberia);
+    const tuberiaSelect = document.getElementById("tuberiaSelect");
 
-    // === Crear gráfico inicial ===
-    const ctx = document.getElementById('graficoLineas').getContext('2d');
-    let grafico = new Chart(ctx, {
+    tuberias.forEach(t => {
+      const option = document.createElement("option");
+      option.value = t;
+      option.textContent = t;
+      tuberiaSelect.appendChild(option);
+    });
+
+    const ctx = document.getElementById("graficoLineas").getContext("2d");
+
+    let chart = new Chart(ctx, {
       type: 'line',
       data: {
-        labels: porcentajes,
-        datasets: construirDatasets(tuberias)
+        datasets: []
       },
       options: {
         responsive: true,
         plugins: {
+          legend: {
+            display: true
+          },
           title: {
             display: true,
-            text: 'Relación Vm/Vsm por Tubería vs % de Sólidos'
-          },
-          legend: {
-            display: true,
-            position: 'bottom'
+            text: 'Ratio de Sedimentación (Vm/Vsm) vs % Sólidos'
           }
         },
         scales: {
           x: {
             title: {
               display: true,
-              text: '% de Sólidos'
+              text: '% Sólidos'
             }
           },
           y: {
@@ -102,18 +94,41 @@
               text: 'Vm/Vsm'
             },
             min: 0,
-            max: 3
+            max: 2
           }
         }
       }
     });
 
-    // === Actualizar gráfico al cambiar selección ===
-    selectFiltro.addEventListener('change', () => {
-      const seleccionadas = Array.from(selectFiltro.selectedOptions).map(opt => opt.value);
-      grafico.data.datasets = construirDatasets(seleccionadas);
-      grafico.update();
-    });
+    function actualizarGrafico(filtro) {
+      const datasets = [];
+      tuberias.forEach((tuberia, index) => {
+        if (filtro !== 'todos' && tuberia !== filtro) return;
+
+        datasets.push({
+          label: tuberia,
+          data: datosPorTuberia[tuberia].x.map((x, i) => ({
+            x,
+            y: datosPorTuberia[tuberia].y[i]
+          })),
+          borderColor: colores[index % colores.length],
+          tension: 0.2,
+          fill: false
+        });
+      });
+
+      chart.data.datasets = datasets;
+      chart.update();
+    }
+
+    function filtrarGrafico() {
+      const tuberiaSeleccionada = tuberiaSelect.value;
+      actualizarGrafico(tuberiaSeleccionada);
+    }
+
+    // Inicializa con todas
+    actualizarGrafico('todos');
   </script>
 </body>
 </html>
+
