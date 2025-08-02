@@ -1,148 +1,165 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <title>Gráfico de Vm/Vsm por tubería</title>
+  <meta charset="UTF-8">
+  <title>Relaciones de Sedimentación en Tuberías</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@1.1.0"></script>
   <style>
     body {
       font-family: Arial, sans-serif;
-      padding: 20px;
+      margin: 20px;
     }
-    #chart-container {
-      width: 100%;
-      height: 500px;
+    canvas {
+      width: 100% !important;
+      height: 600px !important;
     }
-    #filter-container {
-      margin-top: 20px;
+    select {
+      margin: 10px auto;
+      display: block;
+    }
+    #mensajes {
+      margin-top: 30px;
+      padding: 10px;
+      border-top: 2px solid #ccc;
+    }
+    #mensajes p {
+      margin: 5px 0;
+      color: #b30000;
     }
   </style>
 </head>
 <body>
-  <h2>Relación Vm/Vsm por tubería y % de sólidos</h2>
-  <div id="chart-container">
-    <canvas id="lineChart"></canvas>
-  </div>
-  <button onclick="chart.resetZoom()">Restablecer Zoom</button>
-  <div id="filter-container">
-    <label for="pipeFilter">Filtrar por Tubería:</label>
-    <select id="pipeFilter" onchange="updateChart()">
-      <option value="all">Todas</option>
-    </select>
-  </div>
+  <h2>Relaciones de Sedimentación por Tubería (Vm/Vsm vs. % Sólidos)</h2>
+
+  <label for="filtroTuberia">Filtrar por tubería:</label>
+  <select id="filtroTuberia" onchange="filtrarTuberia()">
+    <option value="todas">Todas</option>
+  </select>
+
+  <canvas id="graficoSedimentacion"></canvas>
+
+  <div id="mensajes"></div>
 
   <script>
-    const resumen = JSON.parse(localStorage.getItem('resumenDatos'));
-    const ctx = document.getElementById('lineChart').getContext('2d');
+    const coloresBase = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#8B0000', '#228B22'];
 
-    const uniquePipes = [...new Set(resumen.map(d => d.Nombre))];
-    const uniqueSS = [...new Set(resumen.map(d => d.SS))].sort((a, b) => a - b);
+    const datos = JSON.parse(localStorage.getItem('resumenDatos')) || [];
 
-    const colores = [
-      '#3366CC', '#DC3912', '#FF9900', '#109618', '#990099',
-      '#0099C6', '#DD4477', '#66AA00', '#B82E2E', '#316395',
-      '#994499', '#22AA99', '#AAAA11', '#6633CC', '#E67300'
-    ];
+    const tuberiasMap = {};
 
-    function getData(filterPipe = "all") {
-      const datasets = [];
+    datos.forEach(obj => {
+      const tuberia = obj[0]; // Nombre
+      const Vm_Vsm = parseFloat(obj[5]); // Vm/Vsm
+      const Vm = parseFloat(obj[3]);     // Vm
+      const Vsm = parseFloat(obj[4]);    // Vsm
+      const SS = parseFloat(obj[8]);     // % sólidos
 
-      uniquePipes.forEach((pipe, i) => {
-        if (filterPipe !== "all" && pipe !== filterPipe) return;
+      if (!tuberiasMap[tuberia]) tuberiasMap[tuberia] = [];
 
-        const data = uniqueSS.map(ss => {
-          const item = resumen.find(d => d.Nombre === pipe && d.SS === ss);
-          return item ? item.VmVsm : null;
-        });
+      tuberiasMap[tuberia].push({ x: SS, y: Vm_Vsm, vm: Vm, vsm: Vsm });
+    });
 
-        datasets.push({
-          label: pipe,
-          data: data,
-          fill: false,
-          borderColor: colores[i % colores.length],
-          tension: 0.1
-        });
-      });
+    const tuberias = Object.keys(tuberiasMap);
 
-      return {
-        labels: uniqueSS,
-        datasets: datasets
-      };
-    }
+    const select = document.getElementById('filtroTuberia');
+    tuberias.forEach(t => {
+      const opt = document.createElement('option');
+      opt.value = t;
+      opt.textContent = t;
+      select.appendChild(opt);
+    });
 
-    const chart = new Chart(ctx, {
-      type: 'line',
-      data: getData(),
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        interaction: {
-          mode: 'nearest',
-          axis: 'x',
-          intersect: false
-        },
-        plugins: {
-          legend: {
-            position: 'right'
-          },
-          title: {
-            display: true,
-            text: 'Relación Vm/Vsm vs Porcentaje de Sólidos'
-          },
-          zoom: {
-            zoom: {
-              wheel: {
-                enabled: true
-              },
-              pinch: {
-                enabled: true
-              },
-              mode: 'xy'
+    const ctx = document.getElementById('graficoSedimentacion').getContext('2d');
+    let chart;
+
+    function crearGrafico(tuberiasFiltradas) {
+      const datasets = tuberiasFiltradas.map((tuberia, i) => ({
+        label: tuberia,
+        data: tuberiasMap[tuberia].map(p => ({ x: p.x, y: p.y })),
+        borderColor: coloresBase[i % coloresBase.length],
+        fill: false,
+        tension: 0.1
+      }));
+
+      if (chart) chart.destroy();
+
+      chart = new Chart(ctx, {
+        type: 'line',
+        data: { datasets },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: {
+              position: 'right',
+              labels: {
+                boxWidth: 20
+              }
             },
-            pan: {
-              enabled: true,
-              mode: 'xy'
-            },
-            limits: {
-              x: { min: 'original', max: 'original' },
-              y: { min: 'original', max: 'original' }
-            }
-          }
-        },
-        scales: {
-          y: {
-            beginAtZero: true,
-            title: {
-              display: true,
-              text: 'Vm/Vsm'
+            annotation: {
+              annotations: {
+                lineaReferencia: {
+                  type: 'line',
+                  yMin: 1,
+                  yMax: 1,
+                  borderColor: 'red',
+                  borderWidth: 2,
+                  label: {
+                    content: 'Vm/Vsm = 1',
+                    enabled: true,
+                    position: 'end'
+                  }
+                }
+              }
             }
           },
-          x: {
-            title: {
-              display: true,
-              text: '% Sólidos'
+          scales: {
+            x: {
+              type: 'linear',
+              title: { display: true, text: '% de Sólidos (SS)' }
+            },
+            y: {
+              title: { display: true, text: 'Ratio Vm/Vsm' },
+              min: 0
             }
           }
         }
-      }
-    });
+      });
 
-    function updateChart() {
-      const selected = document.getElementById("pipeFilter").value;
-      chart.data = getData(selected);
-      chart.update();
+      mostrarMensajes(tuberiasFiltradas);
     }
 
-    const select = document.getElementById("pipeFilter");
-    uniquePipes.forEach(p => {
-      const option = document.createElement("option");
-      option.value = p;
-      option.textContent = p;
-      select.appendChild(option);
-    });
+    function mostrarMensajes(tuberiasFiltradas) {
+      const contenedor = document.getElementById('mensajes');
+      contenedor.innerHTML = '';
+
+      tuberiasFiltradas.forEach(tuberia => {
+        const puntos = tuberiasMap[tuberia];
+        puntos.forEach(p => {
+          if (p.y < 1) {
+            const mensaje = `La velocidad en la tubería "${tuberia}" (${p.vm.toFixed(2)} m/s) es menor que la velocidad de sedimentación (${p.vsm.toFixed(2)} m/s) a una concentración de sólido de ${p.x.toFixed(1)}%.`;
+            const pElem = document.createElement('p');
+            pElem.textContent = mensaje;
+            contenedor.appendChild(pElem);
+          }
+        });
+      });
+    }
+
+    function filtrarTuberia() {
+      const seleccionada = select.value;
+      if (seleccionada === 'todas') {
+        crearGrafico(tuberias);
+      } else {
+        crearGrafico([seleccionada]);
+      }
+    }
+
+    // Crear gráfico inicial
+    crearGrafico(tuberias);
   </script>
 </body>
 </html>
+
 
 
