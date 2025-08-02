@@ -29,7 +29,7 @@
 
   <script>
     // === Obtener datos del localStorage ===
-    const datos = JSON.parse(localStorage.getItem('resumenDatosGlobal')) || [];
+    const datos = JSON.parse(localStorage.getItem('resumenDatos')) || [];
 
     // === Extraer tuberías únicas y %SS ordenados ===
     const tuberias = [...new Set(datos.map(d => d.Tuberia))].sort();
