@@ -226,8 +226,21 @@ function generarResumen() {
         document.getElementById('tablaResumen').innerHTML = tablaHTML;
 
         // Guardar en localStorage para uso posterior
-        localStorage.setItem('resumenDatos', JSON.stringify(resumenDatosGlobal));
+        // Convertir a objetos con claves para facilitar uso posterior
+        const resumenDatosObjeto = resumenDatosGlobal.map(fila => ({
+          Tuberia: fila[0],
+          PStaticIn: parseFloat(fila[1]),
+          PStaticOut: parseFloat(fila[2]),
+          Velocity: parseFloat(fila[3]),
+          SettlingVMax: parseFloat(fila[4]),
+          Vm_Vsm: parseFloat(fila[5]),
+          MassFlow: parseFloat(fila[6]),
+          VolFlow: parseFloat(fila[7]),
+          SS: parseFloat(fila[8])
+        }));
 
+        localStorage.setItem('resumenDatos', JSON.stringify(resumenDatosObjeto));
+        
         // Generar archivo XLSX para descarga
         const wb = XLSX.utils.book_new();
         const ws = XLSX.utils.aoa_to_sheet(resumenDatos);
