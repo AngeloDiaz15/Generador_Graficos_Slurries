@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <title>Gráfico de Cavitación</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -16,20 +17,28 @@
       max-width: 100%;
       height: 400px;
     }
+    button {
+      margin-left: 10px;
+    }
   </style>
 </head>
 <body>
-  <h2>Presión Estática vs % Sólidos</h2>
+  <h2>Presión Estática vs % Sólidos por tubería</h2>
 
   <div id="controls">
     <label for="tuberiaSelect">Tubería:</label>
-    <select id="tuberiaSelect"></select>
+    <select id="tuberiaSelect">
+      <option value="__all__">-- Todas --</option>
+    </select>
 
     <label for="tipoPresion">Tipo de Presión:</label>
     <select id="tipoPresion">
       <option value="1">P Static In</option>
       <option value="2">P Static Out</option>
     </select>
+
+    <button onclick="restaurarZoom()">Restaurar Zoom</button>
+    <button onclick="descargarGrafico()">Descargar PNG</button>
   </div>
 
   <canvas id="graficoCavitacion"></canvas>
@@ -42,6 +51,7 @@
     const tipoPresionSelect = document.getElementById('tipoPresion');
     const ctx = document.getElementById('graficoCavitacion').getContext('2d');
 
+    // Agrega las tuberías al select
     tuberiasUnicas.forEach(t => {
       const option = document.createElement('option');
       option.value = t;
@@ -53,41 +63,53 @@
 
     function actualizarGrafico() {
       const tuberiaSeleccionada = tuberiaSelect.value;
-      const tipoPresion = parseInt(tipoPresionSelect.value); // 1 o 2
+      const tipoPresion = parseInt(tipoPresionSelect.value);
 
-      const datosFiltrados = datos
-      .filter(d => d[0] === tuberiaSeleccionada)
-      .map(d => {
-        const ssRaw = d[8];
-        const ss = parseFloat(String(ssRaw).replace(',', '.').replace(/[^\d.-]/g, '')); // Elimina símbolos extraños
-        const y = parseFloat(d[tipoPresion]);
+      const datasets = [];
 
-        console.log("Procesando:", { tubería: d[0], ssRaw, ss, presion: y });
+      const tuberiasAFiltrar = tuberiaSeleccionada === '__all__' ? tuberiasUnicas : [tuberiaSeleccionada];
 
-        return {
-          x: ss,
-          y: y
-        };
-      })
-      .filter(d => !isNaN(d.x) && !isNaN(d.y))
-      .sort((a, b) => a.x - b.x);
+      tuberiasAFiltrar.forEach((tuberia, index) => {
+        const datosFiltrados = datos
+          .filter(d => d[0] === tuberia)
+          .map(d => {
+            const ssRaw = d[8];
+            const ss = parseFloat(String(ssRaw).replace(',', '.').replace(/[^\d.-]/g, ''));
+            const y = parseFloat(d[tipoPresion]);
+            return { x: ss, y: y };
+          })
+          .filter(d => !isNaN(d.x) && !isNaN(d.y))
+          .sort((a, b) => a.x - b.x);
 
-      const data = {
-        datasets: [{
-          label: `${tuberiaSeleccionada} - ${tipoPresion === 1 ? 'P In' : 'P Out'}`,
+        datasets.push({
+          label: `${tuberia} - ${tipoPresion === 1 ? 'P In' : 'P Out'}`,
           data: datosFiltrados,
-          borderColor: 'blue',
-          backgroundColor: 'lightblue',
+          borderColor: getColor(index),
+          backgroundColor: getColor(index, 0.3),
           tension: 0.2
-        }]
-      };
+        });
+      });
+
+      // Línea de presión de vapor (0.0234 bar)
+      datasets.push({
+        label: 'Presión de vapor (0.0234 bar)',
+        data: [{ x: 0, y: 0.0234 }, { x: 100, y: 0.0234 }],
+        borderColor: 'red',
+        borderDash: [5, 5],
+        fill: false,
+        pointRadius: 0,
+      });
 
       const config = {
         type: 'line',
-        data: data,
+        data: { datasets },
         options: {
           responsive: true,
           parsing: false,
+          interaction: {
+            mode: 'nearest',
+            intersect: false,
+          },
           scales: {
             x: {
               type: 'linear',
@@ -110,8 +132,23 @@
             tooltip: {
               callbacks: {
                 label: function(context) {
-                  return `%SS: ${context.parsed.x} → Presión: ${context.parsed.y.toFixed(2)} bar`;
+                  return `%SS: ${context.parsed.x} → Presión: ${context.parsed.y.toFixed(3)} bar`;
                 }
+              }
+            },
+            zoom: {
+              zoom: {
+                wheel: { enabled: true },
+                pinch: { enabled: true },
+                mode: 'xy'
+              },
+              pan: {
+                enabled: true,
+                mode: 'xy'
+              },
+              limits: {
+                y: { min: 'original', max: 'original' },
+                x: { min: 'original', max: 'original' }
               }
             }
           }
@@ -122,6 +159,30 @@
       chart = new Chart(ctx, config);
     }
 
+    // Función para restaurar zoom
+    function restaurarZoom() {
+      if (chart) chart.resetZoom();
+    }
+
+    // Función para descargar gráfico
+    function descargarGrafico() {
+      const enlace = document.createElement('a');
+      enlace.href = chart.toBase64Image();
+      enlace.download = 'grafico_cavitacion.png';
+      enlace.click();
+    }
+
+    // Función para colores
+    function getColor(index, alpha = 1) {
+      const colores = ['#007bff', '#28a745', '#ffc107', '#dc3545', '#17a2b8', '#6f42c1', '#fd7e14'];
+      const color = colores[index % colores.length];
+      if (alpha < 1) {
+        const rgb = color.match(/\w\w/g).map(x => parseInt(x, 16));
+        return `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${alpha})`;
+      }
+      return color;
+    }
+
     tuberiaSelect.addEventListener('change', actualizarGrafico);
     tipoPresionSelect.addEventListener('change', actualizarGrafico);
 
@@ -130,5 +191,4 @@
   </script>
 </body>
 </html>
-
 
