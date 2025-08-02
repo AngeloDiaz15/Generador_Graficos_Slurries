@@ -296,6 +296,23 @@ function abrirVisualizacionSedimentacion() {
 }
 </script>
 
+<br><button onclick="abrirVisualizacionCavitacion()">Visualización de cavitación</button>
+<script>
+function abrirVisualizacionCavitacion() {
+  if (!window.resumenDatosGlobal || resumenDatosGlobal.length === 0) {
+    alert("Primero genera el resumen desde los resultados.");
+    return;
+  }
+
+  // Guarda en localStorage
+  localStorage.setItem('resumenDatos', JSON.stringify(resumenDatosGlobal));
+
+  // Abre las dos visualizaciones en nuevas ventanas
+  window.open('grafica_cavitacion_lineas.html', '_blank');
+  window.open('grafica_cavitacion_tabla.html', '_blank');
+}
+</script>
+
 </body>
 </html>
 
