@@ -38,10 +38,8 @@
     <option value="todas">Todas</option>
   </select>
 
-  <button onclick="zoomChart('in')">Zoom In</button>
-  <button onclick="zoomChart('out')">Zoom Out</button>
   <button onclick="resetZoom()">Restablecer Zoom</button>
-  <button onclick="guardarImagen()">Guardar como Imagen</button>
+  <button onclick="guardarImagen()">Guardar como Imagen (.PNG)</button>
 
   <canvas id="graficoSedimentacion"></canvas>
 
@@ -177,10 +175,6 @@
       }
     }
 
-    function zoomChart(direction) {
-      const factor = direction === 'in' ? 1.2 : 0.8;
-      chart.zoom(factor);
-    }
 
     function guardarImagen() {
       const link = document.createElement('a');
