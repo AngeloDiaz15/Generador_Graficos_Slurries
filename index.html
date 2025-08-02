@@ -225,6 +225,9 @@ function generarResumen() {
         tablaHTML += '</tbody></table>';
         document.getElementById('tablaResumen').innerHTML = tablaHTML;
 
+        // Guardar en localStorage para uso posterior
+        localStorage.setItem('resumenDatos', JSON.stringify(resumenDatosGlobal));
+
         // Generar archivo XLSX para descarga
         const wb = XLSX.utils.book_new();
         const ws = XLSX.utils.aoa_to_sheet(resumenDatos);
@@ -246,6 +249,7 @@ function generarResumen() {
         selectFiltro.style.display = 'inline';
         document.querySelector('label[for="filtroConcentracion"]').style.display = 'inline';
       }
+
     });
   }
 }
