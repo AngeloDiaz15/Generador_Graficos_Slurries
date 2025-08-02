@@ -1,138 +1,128 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <title>Gráfico de Cavitación</title>
+  <meta charset="UTF-8" />
+  <title>Gráfico de Cavitación por Tubería</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.0"></script>
   <style>
-    body {
-      font-family: sans-serif;
-      padding: 20px;
-    }
-    canvas {
-      max-width: 100%;
-    }
-    select {
-      margin: 10px;
-    }
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    canvas { max-width: 100%; height: auto; }
+    select, button { margin: 5px; padding: 5px; }
   </style>
 </head>
 <body>
-  <h2>Gráfico de Cavitación (Presión Estática)</h2>
+  <h2>Gráfico de Cavitación (%SS vs Presión Estática)</h2>
 
-  <label for="tipoPresion">Tipo de Presión:</label>
+  <label for="tipoPresion">Tipo de presión:</label>
   <select id="tipoPresion">
-    <option value="1">P Static In</option>
-    <option value="2">P Static Out</option>
+    <option value="0">P Static In</option>
+    <option value="1">P Static Out</option>
   </select>
 
-  <label for="filtroTuberia">Tubería:</label>
-  <select id="filtroTuberia">
-    <option value="Todas">Todas</option>
-  </select>
+  <label for="tuberiasSelect">Filtrar tuberías:</label>
+  <select id="tuberiasSelect" multiple size="5" style="width:200px;"></select>
+
+  <div>
+    <button onclick="chart.zoom(1.2)">Zoom In</button>
+    <button onclick="chart.zoom(0.8)">Zoom Out</button>
+    <button onclick="chart.resetZoom()">Reset Zoom</button>
+    <button onclick="guardarGrafico()">Guardar como JPG</button>
+  </div>
 
   <canvas id="graficoCavitacion"></canvas>
 
   <script>
-    const datos = JSON.parse(localStorage.getItem("resumenDatos")) || [];
-
+    const datos = JSON.parse(localStorage.getItem('resumenDatos'));
+    const tuberiasUnicas = [...new Set(datos.map(d => d[0]))];
+    const tuberiasSelect = document.getElementById("tuberiasSelect");
     const tipoPresionSelect = document.getElementById("tipoPresion");
-    const filtroTuberiaSelect = document.getElementById("filtroTuberia");
-    const ctx = document.getElementById("graficoCavitacion").getContext("2d");
 
-    // Extraer lista de tuberías únicas
-    const tuberias = [...new Set(datos.map(d => d[0]))].sort();
-    tuberias.forEach(t => {
-      const opt = document.createElement("option");
-      opt.value = t;
-      opt.textContent = t;
-      filtroTuberiaSelect.appendChild(opt);
+    tuberiasUnicas.forEach(t => {
+      const option = document.createElement("option");
+      option.value = t;
+      option.textContent = t;
+      option.selected = true;
+      tuberiasSelect.appendChild(option);
     });
+
+    const colores = [
+      'red', 'blue', 'green', 'orange', 'purple', 'brown',
+      'cyan', 'magenta', 'lime', 'teal', 'indigo', 'gold'
+    ];
 
     let chart;
 
-    function actualizarGrafico() {
-      const tipoPresion = parseInt(tipoPresionSelect.value); // 1 o 2
-      const tuberiaSeleccionada = filtroTuberiaSelect.value;
+    function generarGrafico() {
+      const tipoPresion = parseInt(tipoPresionSelect.value);
+      const tuberiasSeleccionadas = Array.from(tuberiasSelect.selectedOptions).map(opt => opt.value);
 
-      let datosFiltrados = datos;
+      const datasets = tuberiasSeleccionadas.map((tuberia, index) => {
+        const puntos = datos
+          .filter(d => d[0] === tuberia)
+          .map(d => ({
+            x: parseFloat(d[8]),        // %SS
+            y: parseFloat(d[1 + tipoPresion])  // P Static In = d[1], Out = d[2]
+          }))
+          .sort((a, b) => a.x - b.x);
 
-      if (tuberiaSeleccionada !== "Todas") {
-        datosFiltrados = datos.filter(d => d[0] === tuberiaSeleccionada);
-      }
-
-      const datosPorTuberia = {};
-
-      datosFiltrados.forEach(d => {
-        const tuberia = d[0];
-        const ss = parseFloat(d[8].toString().replace(",", ".").trim());
-        const presion = parseFloat(d[tipoPresion].toString().replace(",", ".").trim());
-
-        if (!datosPorTuberia[tuberia]) datosPorTuberia[tuberia] = [];
-        datosPorTuberia[tuberia].push({ x: ss, y: presion });
+        return {
+          label: tuberia,
+          data: puntos,
+          borderColor: colores[index % colores.length],
+          backgroundColor: colores[index % colores.length],
+          tension: 0.3,
+          fill: false
+        };
       });
-
-
-      const datasets = Object.entries(datosPorTuberia).map(([nombre, puntos]) => ({
-        label: nombre,
-        data: puntos.sort((a, b) => a.x - b.x),
-        borderColor: getColor(nombre),
-        tension: 0.2,
-        fill: false
-      }));
 
       if (chart) chart.destroy();
 
+      const ctx = document.getElementById("graficoCavitacion").getContext("2d");
       chart = new Chart(ctx, {
         type: "line",
-        data: {
-          datasets
-        },
+        data: { datasets },
         options: {
           responsive: true,
-          scales: {
-            x: {
-              title: {
-                display: true,
-                text: "% Sólidos"
-              }
-            },
-            y: {
-              title: {
-                display: true,
-                text: "Presión (bar)"
-              },
-              beginAtZero: false
-            }
+          interaction: {
+            mode: "nearest",
+            intersect: false
           },
           plugins: {
-            legend: {
-              display: true
-            },
-            tooltip: {
-              callbacks: {
-                label: context => `Tubería ${context.dataset.label}: ${context.parsed.y.toFixed(2)} bar`
+            legend: { display: true },
+            zoom: {
+              pan: { enabled: true, mode: "xy" },
+              zoom: {
+                wheel: { enabled: true },
+                pinch: { enabled: true },
+                mode: "xy"
               }
+            }
+          },
+          scales: {
+            x: {
+              title: { display: true, text: "% Sólidos" },
+              beginAtZero: true
+            },
+            y: {
+              title: { display: true, text: "Presión Estática (bar)" }
             }
           }
         }
       });
     }
 
-    function getColor(nombre) {
-      const colores = [
-        "#FF6384", "#36A2EB", "#FFCE56", "#4BC0C0",
-        "#9966FF", "#FF9F40", "#8AFF33", "#33FFD1",
-        "#FF33EC", "#3385FF", "#FF6633", "#85FF33"
-      ];
-      const i = [...tuberias].indexOf(nombre) % colores.length;
-      return colores[i];
+    function guardarGrafico() {
+      const link = document.createElement("a");
+      link.download = "grafico_cavitacion.jpg";
+      link.href = chart.toBase64Image("image/jpeg", 1.0);
+      link.click();
     }
 
-    tipoPresionSelect.addEventListener("change", actualizarGrafico);
-    filtroTuberiaSelect.addEventListener("change", actualizarGrafico);
+    tipoPresionSelect.addEventListener("change", generarGrafico);
+    tuberiasSelect.addEventListener("change", generarGrafico);
 
-    actualizarGrafico();
+    generarGrafico();
   </script>
 </body>
 </html>
