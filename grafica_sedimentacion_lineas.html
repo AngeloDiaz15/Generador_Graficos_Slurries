@@ -38,7 +38,10 @@
     <option value="todas">Todas</option>
   </select>
 
-  <button onclick="resetZoom()">Restablecer zoom</button>
+  <button onclick="zoomChart('in')">Zoom In</button>
+  <button onclick="zoomChart('out')">Zoom Out</button>
+  <button onclick="resetZoom()">Restablecer Zoom</button>
+  <button onclick="guardarImagen()">Guardar como Imagen</button>
 
   <canvas id="graficoSedimentacion"></canvas>
 
@@ -52,11 +55,11 @@
     const tuberiasMap = {};
 
     datos.forEach(obj => {
-      const tuberia = obj[0]; // Nombre
-      const Vm_Vsm = parseFloat(obj[5]); // Vm/Vsm
-      const Vm = parseFloat(obj[3]);     // Vm
-      const Vsm = parseFloat(obj[4]);    // Vsm
-      const SS = parseFloat(obj[8]);     // % sólidos
+      const tuberia = obj[0];
+      const Vm_Vsm = parseFloat(obj[5]);
+      const Vm = parseFloat(obj[3]);
+      const Vsm = parseFloat(obj[4]);
+      const SS = parseFloat(obj[8]);
 
       if (!tuberiasMap[tuberia]) tuberiasMap[tuberia] = [];
 
@@ -64,7 +67,6 @@
     });
 
     const tuberias = Object.keys(tuberiasMap);
-
     const select = document.getElementById('filtroTuberia');
     tuberias.forEach(t => {
       const opt = document.createElement('option');
@@ -121,12 +123,8 @@
                 mode: 'xy'
               },
               zoom: {
-                wheel: {
-                  enabled: true
-                },
-                pinch: {
-                  enabled: true
-                },
+                wheel: { enabled: true },
+                pinch: { enabled: true },
                 mode: 'xy'
               }
             }
@@ -177,6 +175,18 @@
       if (chart) {
         chart.resetZoom();
       }
+    }
+
+    function zoomChart(direction) {
+      const factor = direction === 'in' ? 1.2 : 0.8;
+      chart.zoom(factor);
+    }
+
+    function guardarImagen() {
+      const link = document.createElement('a');
+      link.href = chart.toBase64Image();
+      link.download = 'grafica_sedimentacion.png';
+      link.click();
     }
 
     // Crear gráfico inicial
