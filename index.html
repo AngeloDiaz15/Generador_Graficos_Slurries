@@ -119,9 +119,8 @@
   <h3>Resumen combinado de resultados</h3>
   <input type="file" id="archivosXLSX" multiple accept=".xlsx">
   <button onclick="generarResumen()">Generar resumen desde resultados</button><br><br>
-  <button onclick="window.open('grafica_sedimentacion.html', '_blank')">Visualización de sedimentación</button>
-  <button onclick="window.open('grafica_cavitacion.html', '_blank')">Visualización de cavitación</button>
-
+  
+  
   <label for="filtroConcentracion" style="display:none;">Filtrar por %SS:</label>
   <select id="filtroConcentracion" style="display:none;" onchange="filtrarTablaResumen()">
     <option value="todos">Todos</option>
@@ -250,7 +249,6 @@ function generarResumen() {
     });
   }
 }
-localStorage.setItem('resumenDatos', JSON.stringify(resumenDatosGlobal));
 function filtrarTablaResumen() {
   const select = document.getElementById('filtroConcentracion');
   const valor = select.value;
@@ -259,6 +257,22 @@ function filtrarTablaResumen() {
     const ss = fila.getAttribute("data-ss");
     fila.style.display = (valor === "todos" || valor === ss) ? "" : "none";
   });
+}
+</script>
+  
+<br><button onclick="abrirVisualizacionSedimentacion()">Visualización de sedimentación</button>
+<script>
+function abrirVisualizacionSedimentacion() {
+  if (!window.resumenDatosGlobal || resumenDatosGlobal.length === 0) {
+    alert("Primero genera el resumen desde los resultados.");
+    return;
+  }
+
+  // Guarda en localStorage
+  localStorage.setItem('resumenDatos', JSON.stringify(resumenDatosGlobal));
+
+  // Abre la visualización
+  window.open('grafica_sedimentacion.html', '_blank');
 }
 </script>
 
