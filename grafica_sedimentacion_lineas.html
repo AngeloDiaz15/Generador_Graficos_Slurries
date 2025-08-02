@@ -10,144 +10,98 @@
       margin: 20px auto;
       display: block;
     }
-    .filtro-tuberias {
-      max-width: 1000px;
+    select {
       margin: 10px auto;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      justify-content: center;
-    }
-    label {
-      font-family: sans-serif;
-      font-size: 14px;
+      display: block;
     }
   </style>
 </head>
 <body>
-  <h2 style="text-align:center;">Gráfico de sedimentación (Vm/Vsm vs %SS)</h2>
-  <div class="filtro-tuberias" id="filtroTuberias"></div>
+  <h2>Gráfico de Sedimentación (Vm/Vsm vs. % Sólidos)</h2>
+  <label for="filtroTuberia">Filtrar por tubería:</label>
+  <select id="filtroTuberia" onchange="filtrarTuberia()">
+    <option value="todas">Todas</option>
+  </select>
+
   <canvas id="graficoSedimentacion"></canvas>
 
   <script>
-    const resumen = JSON.parse(localStorage.getItem("resumenDatos") || "[]");
+    const coloresBase = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#8B0000', '#228B22'];
 
-    if (!resumen.length) {
-      alert("No hay datos en localStorage.");
-    } else {
-      // Organiza los datos por tubería
-      const datosPorTuberia = {};
+    const datos = JSON.parse(localStorage.getItem('resumenDatos')) || [];
 
-      resumen.forEach(item => {
-        const tuberia = item[0];
-        const SS = parseFloat(item[8]);
-        const VmVsm = parseFloat(item[5]);
+    // Reorganiza los datos por tubería
+    const tuberiasMap = {};
 
-        if (!datosPorTuberia[tuberia]) {
-          datosPorTuberia[tuberia] = [];
-        }
+    datos.forEach(obj => {
+      const tuberia = obj[0]; // Nombre
+      const Vm_Vsm = parseFloat(obj[5]); // Vm/Vsm
+      const SS = parseFloat(obj[8]); // % sólidos
 
-        datosPorTuberia[tuberia].push({ SS, VmVsm });
-      });
+      if (!tuberiasMap[tuberia]) tuberiasMap[tuberia] = [];
 
-      // Asegura orden por SS en cada serie
-      Object.values(datosPorTuberia).forEach(serie => {
-        serie.sort((a, b) => a.SS - b.SS);
-      });
+      tuberiasMap[tuberia].push({ x: SS, y: Vm_Vsm });
+    });
 
-      // Colores limitados (se repiten si hay más tuberías)
-      const colores = [
-        'rgba(75, 192, 192, 1)',
-        'rgba(255, 99, 132, 1)',
-        'rgba(54, 162, 235, 1)',
-        'rgba(255, 206, 86, 1)',
-        'rgba(153, 102, 255, 1)',
-        'rgba(255, 159, 64, 1)',
-        'rgba(0, 200, 83, 1)',
-        'rgba(121, 85, 72, 1)'
-      ];
+    const tuberias = Object.keys(tuberiasMap);
 
-      const datasets = [];
-      const tuberias = Object.keys(datosPorTuberia);
+    // Cargar opciones en el select
+    const select = document.getElementById('filtroTuberia');
+    tuberias.forEach(t => {
+      const opt = document.createElement('option');
+      opt.value = t;
+      opt.textContent = t;
+      select.appendChild(opt);
+    });
 
-      tuberias.forEach((tuberia, index) => {
-        datasets.push({
-          label: tuberia,
-          data: datosPorTuberia[tuberia].map(p => ({ x: p.SS, y: p.VmVsm })),
-          borderColor: colores[index % colores.length],
-          backgroundColor: colores[index % colores.length],
-          tension: 0.2,
-          hidden: false
-        });
-      });
+    const ctx = document.getElementById('graficoSedimentacion').getContext('2d');
 
-      // Crear checkboxes para filtrar
-      const filtroDiv = document.getElementById("filtroTuberias");
-      tuberias.forEach((tuberia, i) => {
-        const checkbox = document.createElement("input");
-        checkbox.type = "checkbox";
-        checkbox.checked = true;
-        checkbox.id = `chk_${i}`;
+    let chart;
 
-        checkbox.addEventListener("change", () => {
-          chart.data.datasets[i].hidden = !checkbox.checked;
-          chart.update();
-        });
+    function crearGrafico(tuberiasFiltradas) {
+      const datasets = tuberiasFiltradas.map((tuberia, i) => ({
+        label: tuberia,
+        data: tuberiasMap[tuberia].sort((a, b) => a.x - b.x),
+        borderColor: coloresBase[i % coloresBase.length],
+        fill: false,
+        tension: 0.1
+      }));
 
-        const label = document.createElement("label");
-        label.htmlFor = `chk_${i}`;
-        label.textContent = tuberia;
+      if (chart) chart.destroy();
 
-        const container = document.createElement("div");
-        container.appendChild(checkbox);
-        container.appendChild(label);
-
-        filtroDiv.appendChild(container);
-      });
-
-      // Crear el gráfico
-      const ctx = document.getElementById('graficoSedimentacion').getContext('2d');
-      const chart = new Chart(ctx, {
+      chart = new Chart(ctx, {
         type: 'line',
-        data: {
-          datasets: datasets
-        },
+        data: { datasets },
         options: {
           responsive: true,
           plugins: {
-            legend: { display: false },
-            tooltip: {
-              callbacks: {
-                label: context => {
-                  return `Tubería: ${context.dataset.label}, Vm/Vsm: ${context.parsed.y.toFixed(4)}, %SS: ${context.parsed.x}`;
-                }
-              }
-            },
-            title: {
-              display: true,
-              text: 'Relación Vm/Vsm según concentración de sólidos',
-              font: { size: 18 }
-            }
+            legend: { display: true }
           },
           scales: {
             x: {
-              title: {
-                display: true,
-                text: '% Sólidos en masa'
-              }
+              type: 'linear',
+              title: { display: true, text: '% de Sólidos (SS)' }
             },
             y: {
-              title: {
-                display: true,
-                text: 'Vm / Vsm'
-              },
-              min: 0,
-              suggestedMax: 2
+              title: { display: true, text: 'Ratio Vm/Vsm' },
+              min: 0
             }
           }
         }
       });
     }
+
+    function filtrarTuberia() {
+      const seleccionada = select.value;
+      if (seleccionada === 'todas') {
+        crearGrafico(tuberias);
+      } else {
+        crearGrafico([seleccionada]);
+      }
+    }
+
+    // Crea el gráfico inicial
+    crearGrafico(tuberias);
   </script>
 </body>
 </html>
