@@ -32,17 +32,6 @@
   <a id="descargarBat" style="display:none;">Descargar ejecutar_modelos.bat</a><br><br>
   <a id="descargarXLSX" style="display:none;">Descargar tabla_resultados.xlsx</a><br><br>
 
-  <h3>Resumen combinado de resultados</h3>
-  <input type="file" id="archivosXLSX" multiple accept=".xlsx">
-  <button onclick="generarResumen()">Generar resumen desde resultados</button><br><br>
-
-  <label for="filtroConcentracion" style="display:none;">Filtrar por %SS:</label>
-  <select id="filtroConcentracion" style="display:none;" onchange="filtrarTablaResumen()">
-    <option value="todos">Todos</option>
-  </select><br><br>
-  
-  <a id="descargarResumen" style="display:none;">Descargar Resumen.xlsx</a>
-  <div id="tablaResumen"></div>
 
   <div id="tablaResultados" style="margin-top:20px;"></div>
 
@@ -125,9 +114,19 @@
       };
       reader.readAsText(input.files[0]);
     }
-</script>
+  </script>
 
+  <h3>Resumen combinado de resultados</h3>
+  <input type="file" id="archivosXLSX" multiple accept=".xlsx">
+  <button onclick="generarResumen()">Generar resumen desde resultados</button><br><br>
 
+  <label for="filtroConcentracion" style="display:none;">Filtrar por %SS:</label>
+  <select id="filtroConcentracion" style="display:none;" onchange="filtrarTablaResumen()">
+    <option value="todos">Todos</option>
+  </select><br><br>
+  
+  <a id="descargarResumen" style="display:none;">Descargar Resumen.xlsx</a>
+  <div id="tablaResumen"></div>
 
 <script>
 let resumenDatosGlobal = [];
