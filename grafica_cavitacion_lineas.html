@@ -27,7 +27,7 @@
   </style>
 </head>
 <body>
-  <h2>Presión Estática vs % Sólidos</h2>
+  <h2>Presión Estática vs % Sólidos por Tubería</h2>
 
   <div id="controls">
     <label for="tuberiaSelect">Tubería:</label>
@@ -41,13 +41,15 @@
       <option value="2">P Static Out</option>
     </select>
 
+    <label for="presionVapor">Presión de vapor (bar):</label>
+    <input type="number" id="presionVapor" step="0.0001" value="0.0234" style="width: 80px;" />
+
     <button onclick="restaurarZoom()">Restaurar Zoom</button>
     <button onclick="descargarGrafico()">Descargar PNG</button>
   </div>
 
   <canvas id="graficoCavitacion"></canvas>
 
-  <!-- 🔴 Mensajes de advertencia -->
   <div id="mensajesAdvertencia"></div>
 
   <script>
@@ -56,6 +58,7 @@
     const tuberiasUnicas = [...new Set(datos.map(d => d[0]))];
     const tuberiaSelect = document.getElementById('tuberiaSelect');
     const tipoPresionSelect = document.getElementById('tipoPresion');
+    const presionVaporInput = document.getElementById('presionVapor');
     const ctx = document.getElementById('graficoCavitacion').getContext('2d');
     const mensajesDiv = document.getElementById('mensajesAdvertencia');
 
@@ -71,9 +74,10 @@
     function actualizarGrafico() {
       const tuberiaSeleccionada = tuberiaSelect.value;
       const tipoPresion = parseInt(tipoPresionSelect.value);
+      const presionVapor = parseFloat(presionVaporInput.value);
 
       const datasets = [];
-      const mensajes = []; // 🔴 Lista de advertencias
+      const mensajes = [];
       const tuberiasAFiltrar = tuberiaSeleccionada === '__all__' ? tuberiasUnicas : [tuberiaSeleccionada];
 
       tuberiasAFiltrar.forEach((tuberia, index) => {
@@ -84,11 +88,10 @@
             const ss = parseFloat(String(ssRaw).replace(',', '.').replace(/[^\d.-]/g, ''));
             const y = parseFloat(d[tipoPresion]);
 
-            // 🔴 Verifica presión menor a 0.0234
-            if (!isNaN(ss) && !isNaN(y) && y < 0.0234) {
+            if (!isNaN(ss) && !isNaN(y) && y < presionVapor) {
               const mensaje = tipoPresion === 1
-                ? `La presión estática a la entrada (${y.toFixed(4)} bar) en la tubería "${tuberia}" es menor a la presión de vapor (0.0234 bares) a una concentración de sólidosdel ${ss}%`
-                : `La presión estática a la salida (${y.toFixed(4)} bar) en la tubería "${tuberia}" es menor a la presión de vapor (0.0234 bares) a una concentración de sólidos del ${ss}%`;
+                ? `La presión estática a la entrada (${y.toFixed(4)} bar) en la tubería "${tuberia}" es menor a la presión de vapor (${presionVapor} bar) a una concentración de sólidos del ${ss}%`
+                : `La presión estática a la salida (${y.toFixed(4)} bar) en la tubería "${tuberia}" es menor a la presión de vapor (${presionVapor} bar) a una concentración de sólidos del ${ss}%`;
               mensajes.push(mensaje);
             }
 
@@ -106,10 +109,10 @@
         });
       });
 
-      // Línea de presión de vapor (0.0234 bar)
+      // Línea de presión de vapor (según input)
       datasets.push({
-        label: 'Presión de vapor (0.0234 bar)',
-        data: [{ x: 0, y: 0.0234 }, { x: 100, y: 0.0234 }],
+        label: `Presión de vapor (${presionVapor} bar)`,
+        data: [{ x: 0, y: presionVapor }, { x: 100, y: presionVapor }],
         borderColor: 'red',
         borderDash: [5, 5],
         fill: false,
@@ -172,7 +175,7 @@
       if (chart) chart.destroy();
       chart = new Chart(ctx, config);
 
-      // 🔴 Mostrar mensajes de advertencia
+      // Mostrar advertencias
       mensajesDiv.innerHTML = '';
       if (mensajes.length > 0) {
         const ul = document.createElement('ul');
@@ -206,8 +209,10 @@
       return color;
     }
 
+    // Eventos
     tuberiaSelect.addEventListener('change', actualizarGrafico);
     tipoPresionSelect.addEventListener('change', actualizarGrafico);
+    presionVaporInput.addEventListener('input', actualizarGrafico);
 
     // Carga inicial
     actualizarGrafico();
