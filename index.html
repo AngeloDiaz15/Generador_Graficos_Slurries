@@ -277,11 +277,12 @@ function abrirVisualizacionSedimentacion() {
   // Guarda en localStorage
   localStorage.setItem('resumenDatos', JSON.stringify(resumenDatosGlobal));
 
-  // Abre la visualización
-  window.open('grafica_sedimentacion.html', '_blank');
+  // Abre las tres visualizaciones en nuevas ventanas
+  window.open('grafica_sedimentacion_lineas.html', '_blank');
+  window.open('grafica_sedimentacion_matriz.html', '_blank');
+  window.open('grafica_sedimentacion_tabla.html', '_blank');
 }
 </script>
-
 
 </body>
 </html>
