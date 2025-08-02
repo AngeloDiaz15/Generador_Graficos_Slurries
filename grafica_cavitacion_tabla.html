@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Relaciones de Sedimentación en Tuberías</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@1.1.0"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+    canvas {
+      width: 100% !important;
+      height: 600px !important;
+    }
+    select {
+      margin: 10px auto;
+      display: block;
+    }
+    #mensajes {
+      margin-top: 30px;
+      padding: 10px;
+      border-top: 2px solid #ccc;
+    }
+    #mensajes p {
+      margin: 5px 0;
+      color: #b30000;
+    }
+  </style>
+</head>
+<body>
+  <h2>Relaciones de Sedimentación por Tubería (Vm/Vsm vs. % Sólidos)</h2>
+
+  <label for="filtroTuberia">Filtrar por tubería:</label>
+  <select id="filtroTuberia" onchange="filtrarTuberia()">
+    <option value="todas">Todas</option>
+  </select>
+
+  <canvas id="graficoSedimentacion"></canvas>
+
+  <div id="mensajes"></div>
+
+  <script>
+    const coloresBase = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#8B0000', '#228B22'];
+
+    const datos = JSON.parse(localStorage.getItem('resumenDatos')) || [];
+
+    const tuberiasMap = {};
+
+    datos.forEach(obj => {
+      const tuberia = obj[0]; // Nombre
+      const Vm_Vsm = parseFloat(obj[5]); // Vm/Vsm
+      const Vm = parseFloat(obj[3]);     // Vm
+      const Vsm = parseFloat(obj[4]);    // Vsm
+      const SS = parseFloat(obj[8]);     // % sólidos
+
+      if (!tuberiasMap[tuberia]) tuberiasMap[tuberia] = [];
+
+      tuberiasMap[tuberia].push({ x: SS, y: Vm_Vsm, vm: Vm, vsm: Vsm });
+    });
+
+    const tuberias = Object.keys(tuberiasMap);
+
+    const select = document.getElementById('filtroTuberia');
+    tuberias.forEach(t => {
+      const opt = document.createElement('option');
+      opt.value = t;
+      opt.textContent = t;
+      select.appendChild(opt);
+    });
+
+    const ctx = document.getElementById('graficoSedimentacion').getContext('2d');
+    let chart;
+
+    function crearGrafico(tuberiasFiltradas) {
+      const datasets = tuberiasFiltradas.map((tuberia, i) => ({
+        label: tuberia,
+        data: tuberiasMap[tuberia].map(p => ({ x: p.x, y: p.y })),
+        borderColor: coloresBase[i % coloresBase.length],
+        fill: false,
+        tension: 0.1
+      }));
+
+      if (chart) chart.destroy();
+
+      chart = new Chart(ctx, {
+        type: 'line',
+        data: { datasets },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: {
+              position: 'right',
+              labels: {
+                boxWidth: 20
+              }
+            },
+            annotation: {
+              annotations: {
+                lineaReferencia: {
+                  type: 'line',
+                  yMin: 1,
+                  yMax: 1,
+                  borderColor: 'red',
+                  borderWidth: 2,
+                  label: {
+                    content: 'Vm/Vsm = 1',
+                    enabled: true,
+                    position: 'end'
+                  }
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              type: 'linear',
+              title: { display: true, text: '% de Sólidos (SS)' }
+            },
+            y: {
+              title: { display: true, text: 'Ratio Vm/Vsm' },
+              min: 0
+            }
+          }
+        }
+      });
+
+      mostrarMensajes(tuberiasFiltradas);
+    }
+
+    function mostrarMensajes(tuberiasFiltradas) {
+      const contenedor = document.getElementById('mensajes');
+      contenedor.innerHTML = '';
+
+      tuberiasFiltradas.forEach(tuberia => {
+        const puntos = tuberiasMap[tuberia];
+        puntos.forEach(p => {
+          if (p.y < 1) {
+            const mensaje = `La velocidad en la tubería "${tuberia}" (${p.vm.toFixed(2)} m/s) es menor que la velocidad de sedimentación (${p.vsm.toFixed(2)} m/s) a una concentración de sólido de ${p.x.toFixed(1)}%.`;
+            const pElem = document.createElement('p');
+            pElem.textContent = mensaje;
+            contenedor.appendChild(pElem);
+          }
+        });
+      });
+    }
+
+    function filtrarTuberia() {
+      const seleccionada = select.value;
+      if (seleccionada === 'todas') {
+        crearGrafico(tuberias);
+      } else {
+        crearGrafico([seleccionada]);
+      }
+    }
+
+    // Crear gráfico inicial
+    crearGrafico(tuberias);
+  </script>
+</body>
+</html>
+
