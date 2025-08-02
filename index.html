@@ -35,6 +35,12 @@
   <h3>Resumen combinado de resultados</h3>
   <input type="file" id="archivosXLSX" multiple accept=".xlsx">
   <button onclick="generarResumen()">Generar resumen desde resultados</button><br><br>
+
+  <label for="filtroConcentracion" style="display:none;">Filtrar por %SS:</label>
+  <select id="filtroConcentracion" style="display:none;" onchange="filtrarTablaResumen()">
+    <option value="todos">Todos</option>
+  </select><br><br>
+  
   <a id="descargarResumen" style="display:none;">Descargar Resumen.xlsx</a>
   <div id="tablaResumen"></div>
 
@@ -124,6 +130,8 @@
 
 
 <script>
+let resumenDatosGlobal = [];
+
 function generarResumen() {
   const input = document.getElementById('archivosXLSX');
   const archivos = input.files;
@@ -134,7 +142,13 @@ function generarResumen() {
 
   const columnas = ["Tubería", "P Static In", "P Static Out", "Velocity", "Settling V Max", "Vm/Vsm", "Mass Flow", "Vol Flow", "%SS"];
   const resumenDatos = [columnas];
-  let tablaHTML = '<h3>Resumen combinado:</h3><table><tr>' + columnas.map(c => `<th>${c}</th>`).join('') + '</tr>';
+  resumenDatosGlobal = []; // Reinicia global
+
+  let tablaHTML = '<h3>Resumen combinado:</h3><table id="tablaResumenHTML"><thead><tr>' +
+    columnas.map(c => `<th>${c}</th>`).join('') +
+    '</tr></thead><tbody>';
+
+  const concentracionesDetectadas = new Set();
 
   const leerExcel = (archivo, callback) => {
     const reader = new FileReader();
@@ -145,6 +159,7 @@ function generarResumen() {
       const nombre = archivo.name;
       const ssMatch = nombre.match(/(\d+)\D*\.xlsx$/);
       const ss = ssMatch ? parseInt(ssMatch[1]) : "N/A";
+      concentracionesDetectadas.add(ss);
 
       const getCol = (colLetra) => XLSX.utils.sheet_to_json(sheet, { header: 1, range: `${colLetra}3:${colLetra}1000`, blankrows: false }).map(r => r[0]);
 
@@ -173,18 +188,18 @@ function generarResumen() {
         const idxInOut = idxs[0];
         const idxOtros = idxs[1];
 
-        const velocity = colE[idxOtros + 2] ?? null;
-        const settlingV = colF[idxOtros + 2] ?? null;
-        const vmvsm = (velocity !== null && settlingV !== null && settlingV !== 0)
-          ? (velocity / settlingV).toFixed(4)
+        const velocity = colE[idxOtros + 2] ?? "";
+        const settlingV = colF[idxOtros + 2] ?? "";
+        const vmvsm = (velocity !== "" && settlingV !== "" && settlingV !== 0)
+          ? (parseFloat(velocity) / parseFloat(settlingV)).toFixed(4)
           : "";
 
         const fila = [
           tub,
           colM[idxInOut] ?? "",
           colN[idxInOut] ?? "",
-          velocity ?? "",
-          settlingV ?? "",
+          velocity,
+          settlingV,
           vmvsm,
           colJ[idxOtros + 2] ?? "",
           colK[idxOtros + 2] ?? "",
@@ -192,7 +207,9 @@ function generarResumen() {
         ];
 
         resumenDatos.push(fila);
-        tablaHTML += '<tr>' + fila.map(v => `<td>${v}</td>`).join('') + '</tr>';
+        resumenDatosGlobal.push(fila); // guarda para filtro
+
+        tablaHTML += '<tr data-ss="' + ss + '">' + fila.map(v => `<td>${v}</td>`).join('') + '</tr>';
       }
 
       callback();
@@ -205,9 +222,10 @@ function generarResumen() {
     leerExcel(archivo, () => {
       archivosProcesados++;
       if (archivosProcesados === archivos.length) {
-        tablaHTML += '</table>';
+        tablaHTML += '</tbody></table>';
         document.getElementById('tablaResumen').innerHTML = tablaHTML;
 
+        // Generar archivo XLSX para descarga
         const wb = XLSX.utils.book_new();
         const ws = XLSX.utils.aoa_to_sheet(resumenDatos);
         XLSX.utils.book_append_sheet(wb, ws, "Resumen");
@@ -218,14 +236,31 @@ function generarResumen() {
         link.download = 'Resumen.xlsx';
         link.textContent = 'Descargar Resumen.xlsx';
         link.style.display = 'inline';
+
+        // Mostrar y poblar select de filtro
+        const selectFiltro = document.getElementById('filtroConcentracion');
+        selectFiltro.innerHTML = '<option value="todos">Todos</option>';
+        [...concentracionesDetectadas].sort((a, b) => a - b).forEach(ss => {
+          selectFiltro.innerHTML += `<option value="${ss}">${ss}%</option>`;
+        });
+        selectFiltro.style.display = 'inline';
+        document.querySelector('label[for="filtroConcentracion"]').style.display = 'inline';
       }
     });
   }
 }
+
+function filtrarTablaResumen() {
+  const select = document.getElementById('filtroConcentracion');
+  const valor = select.value;
+  const filas = document.querySelectorAll("#tablaResumenHTML tbody tr");
+  filas.forEach(fila => {
+    const ss = fila.getAttribute("data-ss");
+    fila.style.display = (valor === "todos" || valor === ss) ? "" : "none";
+  });
+}
 </script>
 
-
-  
 
 </body>
 </html>
