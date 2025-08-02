@@ -2,128 +2,125 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <title>Gráfico de Cavitación por Tubería</title>
+  <title>Gráfico de Cavitación</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.0"></script>
   <style>
-    body { font-family: Arial, sans-serif; padding: 20px; }
-    canvas { max-width: 100%; height: auto; }
-    select, button { margin: 5px; padding: 5px; }
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+    }
+    #controls {
+      margin-bottom: 20px;
+    }
+    canvas {
+      max-width: 100%;
+      height: 400px;
+    }
   </style>
 </head>
 <body>
-  <h2>Gráfico de Cavitación (%SS vs Presión Estática)</h2>
+  <h2>Presión Estática vs % Sólidos</h2>
 
-  <label for="tipoPresion">Tipo de presión:</label>
-  <select id="tipoPresion">
-    <option value="0">P Static In</option>
-    <option value="1">P Static Out</option>
-  </select>
+  <div id="controls">
+    <label for="tuberiaSelect">Tubería:</label>
+    <select id="tuberiaSelect"></select>
 
-  <label for="tuberiasSelect">Filtrar tuberías:</label>
-  <select id="tuberiasSelect" multiple size="5" style="width:200px;"></select>
-
-  <div>
-    <button onclick="chart.zoom(1.2)">Zoom In</button>
-    <button onclick="chart.zoom(0.8)">Zoom Out</button>
-    <button onclick="chart.resetZoom()">Reset Zoom</button>
-    <button onclick="guardarGrafico()">Guardar como JPG</button>
+    <label for="tipoPresion">Tipo de Presión:</label>
+    <select id="tipoPresion">
+      <option value="1">P Static In</option>
+      <option value="2">P Static Out</option>
+    </select>
   </div>
 
   <canvas id="graficoCavitacion"></canvas>
 
   <script>
-    const datos = JSON.parse(localStorage.getItem('resumenDatos'));
+    const datos = JSON.parse(localStorage.getItem('resumenDatos')) || [];
+
     const tuberiasUnicas = [...new Set(datos.map(d => d[0]))];
-    const tuberiasSelect = document.getElementById("tuberiasSelect");
-    const tipoPresionSelect = document.getElementById("tipoPresion");
+    const tuberiaSelect = document.getElementById('tuberiaSelect');
+    const tipoPresionSelect = document.getElementById('tipoPresion');
+    const ctx = document.getElementById('graficoCavitacion').getContext('2d');
 
     tuberiasUnicas.forEach(t => {
-      const option = document.createElement("option");
+      const option = document.createElement('option');
       option.value = t;
       option.textContent = t;
-      option.selected = true;
-      tuberiasSelect.appendChild(option);
+      tuberiaSelect.appendChild(option);
     });
-
-    const colores = [
-      'red', 'blue', 'green', 'orange', 'purple', 'brown',
-      'cyan', 'magenta', 'lime', 'teal', 'indigo', 'gold'
-    ];
 
     let chart;
 
-    function generarGrafico() {
-      const tipoPresion = parseInt(tipoPresionSelect.value);
-      const tuberiasSeleccionadas = Array.from(tuberiasSelect.selectedOptions).map(opt => opt.value);
+    function actualizarGrafico() {
+      const tuberiaSeleccionada = tuberiaSelect.value;
+      const tipoPresion = parseInt(tipoPresionSelect.value); // 1 o 2
 
-      const datasets = tuberiasSeleccionadas.map((tuberia, index) => {
-        const puntos = datos
-          .filter(d => d[0] === tuberia)
-          .map(d => ({
-            x: parseFloat(d[8]),        // %SS
-            y: parseFloat(d[1 + tipoPresion])  // P Static In = d[1], Out = d[2]
-          }))
-          .sort((a, b) => a.x - b.x);
+      const datosFiltrados = datos
+        .filter(d => d[0] === tuberiaSeleccionada)
+        .map(d => ({
+          x: parseFloat(d[8]), // %SS
+          y: parseFloat(d[tipoPresion]) // P Static In (1) o Out (2)
+        }))
+        .filter(d => !isNaN(d.x) && !isNaN(d.y))
+        .sort((a, b) => a.x - b.x);
 
-        return {
-          label: tuberia,
-          data: puntos,
-          borderColor: colores[index % colores.length],
-          backgroundColor: colores[index % colores.length],
-          tension: 0.3,
-          fill: false
-        };
-      });
+      const data = {
+        datasets: [{
+          label: `${tuberiaSeleccionada} - ${tipoPresion === 1 ? 'P In' : 'P Out'}`,
+          data: datosFiltrados,
+          borderColor: 'blue',
+          backgroundColor: 'lightblue',
+          tension: 0.2
+        }]
+      };
 
-      if (chart) chart.destroy();
-
-      const ctx = document.getElementById("graficoCavitacion").getContext("2d");
-      chart = new Chart(ctx, {
-        type: "line",
-        data: { datasets },
+      const config = {
+        type: 'line',
+        data: data,
         options: {
           responsive: true,
-          interaction: {
-            mode: "nearest",
-            intersect: false
-          },
-          plugins: {
-            legend: { display: true },
-            zoom: {
-              pan: { enabled: true, mode: "xy" },
-              zoom: {
-                wheel: { enabled: true },
-                pinch: { enabled: true },
-                mode: "xy"
+          parsing: false,
+          scales: {
+            x: {
+              type: 'linear',
+              title: {
+                display: true,
+                text: '% Sólidos'
+              }
+            },
+            y: {
+              title: {
+                display: true,
+                text: 'Presión Estática (bar)'
               }
             }
           },
-          scales: {
-            x: {
-              title: { display: true, text: "% Sólidos" },
-              beginAtZero: true
+          plugins: {
+            legend: {
+              display: true
             },
-            y: {
-              title: { display: true, text: "Presión Estática (bar)" }
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  return `%SS: ${context.parsed.x} → Presión: ${context.parsed.y.toFixed(2)} bar`;
+                }
+              }
             }
           }
         }
-      });
+      };
+
+      if (chart) chart.destroy();
+      chart = new Chart(ctx, config);
     }
 
-    function guardarGrafico() {
-      const link = document.createElement("a");
-      link.download = "grafico_cavitacion.jpg";
-      link.href = chart.toBase64Image("image/jpeg", 1.0);
-      link.click();
-    }
+    tuberiaSelect.addEventListener('change', actualizarGrafico);
+    tipoPresionSelect.addEventListener('change', actualizarGrafico);
 
-    tipoPresionSelect.addEventListener("change", generarGrafico);
-    tuberiasSelect.addEventListener("change", generarGrafico);
-
-    generarGrafico();
+    // Carga inicial
+    actualizarGrafico();
   </script>
 </body>
 </html>
+
 
