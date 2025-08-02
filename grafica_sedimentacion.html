@@ -4,203 +4,147 @@
   <meta charset="UTF-8">
   <title>Visualización de Sedimentación</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@1.1.0/dist/chartjs-chart-matrix.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@1.3.0/dist/chartjs-chart-matrix.min.js"></script>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      margin: 30px;
-    }
-    canvas {
-      max-width: 100%;
-      margin-bottom: 40px;
-    }
-    table {
-      border-collapse: collapse;
-      margin-bottom: 40px;
-      width: 100%;
-    }
-    th, td {
-      border: 1px solid #ccc;
-      padding: 6px;
-      text-align: center;
-    }
-    th {
-      background-color: #f2f2f2;
-    }
-    td.vmvsm-low {
-      background-color: #f99;
-    }
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    canvas { max-width: 800px; margin: 20px auto; display: block; }
+    table, th, td { border: 1px solid #ccc; border-collapse: collapse; padding: 6px; text-align: center; }
+    th { background-color: #f2f2f2; }
+    .rojo { background-color: #f8d7da !important; color: #721c24; }
   </style>
 </head>
 <body>
-  <h2>Visualización de Sedimentación</h2>
-  <canvas id="lineChart" height="300"></canvas>
 
-  <h3>Tabla interactiva Vm/Vsm</h3>
-  <div id="tablaVmVsm"></div>
+  <h2>Gráfico de Líneas Múltiples por Tubería</h2>
+  <canvas id="lineChart"></canvas>
 
-  <h3>Mapa de calor de Vm/Vsm por tubería y %SS</h3>
-  <canvas id="heatmapChart" width="900" height="500"></canvas>
+  <h2>Tabla Interactiva con Colores</h2>
+  <div id="tablaSedimentacion"></div>
+
+  <h2>Mapa de Calor de Sedimentación (Vm/Vsm)</h2>
+  <canvas id="heatmapCanvas"></canvas>
 
   <script>
-    const dataRaw = JSON.parse(localStorage.getItem('resumenDatos') || '[]');
+    const resumenDatos = JSON.parse(localStorage.getItem('resumenDatos')) || [];
 
-    if (!dataRaw.length) {
-      document.body.innerHTML = "<h3 style='color:red'>⚠ Primero genera el resumen desde los resultados en index.html</h3>";
-      throw new Error("No hay datos en localStorage");
+    if (!resumenDatos.length) {
+      document.body.innerHTML = '<h3 style="color:red;">⚠️ Primero genera el resumen desde index.html</h3>';
+      throw new Error("No hay datos en localStorage.");
     }
 
-    const headers = ["Tubería", "P Static In", "P Static Out", "Velocity", "Settling V Max", "Vm/Vsm", "Mass Flow", "Vol Flow", "%SS"];
-    const data = dataRaw.map(arr => ({
-      tuberia: arr[0],
-      pIn: parseFloat(arr[1]),
-      pOut: parseFloat(arr[2]),
-      velocity: parseFloat(arr[3]),
-      settling: parseFloat(arr[4]),
-      vmvsm: parseFloat(arr[5]),
-      massFlow: parseFloat(arr[6]),
-      volFlow: parseFloat(arr[7]),
-      ss: parseInt(arr[8])
-    }));
+    const tuberias = [...new Set(resumenDatos.map(f => f[0]))];
+    const concentraciones = [...new Set(resumenDatos.map(f => parseFloat(f[8])))]
+      .filter(v => !isNaN(v))
+      .sort((a, b) => a - b);
 
-    // === GRÁFICO DE LÍNEAS MÚLTIPLES ===
-    function renderizarLineas(data) {
-      const tuberias = [...new Set(data.map(d => d.tuberia))];
-      const datasets = tuberias.map((tub, i) => {
-        const color = `hsl(${(i * 360 / tuberias.length)}, 70%, 50%)`;
-        return {
-          label: tub,
-          data: data.filter(d => d.tuberia === tub).map(d => ({ x: d.ss, y: d.vmvsm })),
-          borderColor: color,
-          backgroundColor: color,
-          tension: 0.2
-        };
-      });
-
-      const ctx = document.getElementById('lineChart').getContext('2d');
-      new Chart(ctx, {
-        type: 'line',
-        data: { datasets },
-        options: {
-          responsive: true,
-          plugins: {
-            title: {
-              display: true,
-              text: 'Evolución de Vm/Vsm por tubería'
-            }
-          },
-          scales: {
-            x: {
-              type: 'linear',
-              title: { display: true, text: '%SS' }
-            },
-            y: {
-              title: { display: true, text: 'Vm/Vsm' }
-            }
-          }
-        }
-      });
-    }
-
-    // === TABLA INTERACTIVA ===
-    function renderizarTabla(data) {
-      const tuberias = [...new Set(data.map(d => d.tuberia))];
-      const concentraciones = [...new Set(data.map(d => d.ss))].sort((a, b) => a - b);
-
-      let tabla = '<table><thead><tr><th>Tubería</th>' + 
-                  concentraciones.map(ss => `<th>${ss}%</th>`).join('') + 
-                  '</tr></thead><tbody>';
-
-      for (const tub of tuberias) {
-        tabla += `<tr><td>${tub}</td>`;
-        for (const ss of concentraciones) {
-          const punto = data.find(d => d.tuberia === tub && d.ss === ss);
-          const clase = punto && punto.vmvsm < 1 ? 'vmvsm-low' : '';
-          const valor = punto ? punto.vmvsm.toFixed(3) : '-';
-          tabla += `<td class="${clase}">${valor}</td>`;
-        }
-        tabla += '</tr>';
-      }
-      tabla += '</tbody></table>';
-      document.getElementById('tablaVmVsm').innerHTML = tabla;
-    }
-
-    // === MAPA DE CALOR ===
-    function renderizarMapaCalor(data) {
-      const tuberias = [...new Set(data.map(d => d.tuberia))];
-      const concentraciones = [...new Set(data.map(d => d.ss))].sort((a, b) => a - b);
-
-      const colorScale = val => {
-        if (val == null) return '#ccc';
-        if (val < 1) return 'rgb(255, 100, 100)';
-        const hue = Math.min(120, 60 + (val - 1) * 100); // verde si >1
-        return `hsl(${hue}, 80%, 60%)`;
+    // === 1. GRÁFICO DE LÍNEAS MÚLTIPLES ===
+    const datasets = tuberias.map((tubo, i) => {
+      const color = `hsl(${(i * 360 / tuberias.length)}, 70%, 50%)`;
+      return {
+        label: tubo,
+        data: resumenDatos
+          .filter(f => f[0] === tubo && !isNaN(parseFloat(f[5])))
+          .map(f => ({ x: parseFloat(f[8]), y: parseFloat(f[5]) })),
+        borderColor: color,
+        backgroundColor: color,
+        tension: 0.2
       };
+    });
 
-      const chartData = [];
-      for (let i = 0; i < tuberias.length; i++) {
-        for (let j = 0; j < concentraciones.length; j++) {
-          const tub = tuberias[i];
-          const ss = concentraciones[j];
-          const punto = data.find(d => d.tuberia === tub && d.ss === ss);
-          if (!punto) continue;
-          chartData.push({
-            x: ss,
-            y: tub,
-            v: punto.vmvsm,
-            backgroundColor: colorScale(punto.vmvsm)
+    new Chart(document.getElementById('lineChart').getContext('2d'), {
+      type: 'line',
+      data: { datasets },
+      options: {
+        responsive: true,
+        scales: {
+          x: { title: { display: true, text: '% Sólidos' }, type: 'linear' },
+          y: { title: { display: true, text: 'Vm/Vsm' } }
+        }
+      }
+    });
+
+    // === 2. TABLA INTERACTIVA ===
+    const tabla = document.createElement('table');
+    const cabecera = ['Tubería', ...concentraciones.map(c => `${c}%`)];
+    tabla.innerHTML = '<tr>' + cabecera.map(t => `<th>${t}</th>`).join('') + '</tr>';
+
+    tuberias.forEach(tubo => {
+      const fila = document.createElement('tr');
+      fila.innerHTML = `<td>${tubo}</td>`;
+      concentraciones.forEach(c => {
+        const filaData = resumenDatos.find(f => f[0] === tubo && parseFloat(f[8]) === c);
+        const valor = filaData ? parseFloat(filaData[5]) : '';
+        const td = document.createElement('td');
+        td.textContent = valor || '-';
+        if (valor && valor < 1) td.classList.add('rojo');
+        fila.appendChild(td);
+      });
+      tabla.appendChild(fila);
+    });
+    document.getElementById('tablaSedimentacion').appendChild(tabla);
+
+    // === 3. MAPA DE CALOR ===
+    const heatData = [];
+    tuberias.forEach((t, i) => {
+      concentraciones.forEach((c, j) => {
+        const f = resumenDatos.find(d => d[0] === t && parseFloat(d[8]) === c);
+        if (f) {
+          const valor = parseFloat(f[5]);
+          heatData.push({
+            x: c,
+            y: t,
+            v: valor
           });
         }
-      }
+      });
+    });
 
-      const ctx = document.getElementById('heatmapChart').getContext('2d');
-      new Chart(ctx, {
-        type: 'matrix',
-        data: {
-          datasets: [{
-            label: 'Mapa de calor',
-            data: chartData,
-            backgroundColor: ctx => ctx.raw.backgroundColor,
-            width: ({ chart }) => chart.chartArea.width / concentraciones.length - 2,
-            height: ({ chart }) => chart.chartArea.height / tuberias.length - 2
-          }]
-        },
-        options: {
-          maintainAspectRatio: false,
-          plugins: {
-            tooltip: {
-              callbacks: {
-                title: ctx => `Tubería: ${ctx[0].raw.y}, %SS: ${ctx[0].raw.x}`,
-                label: ctx => `Vm/Vsm: ${ctx.raw.v.toFixed(3)}`
-              }
-            },
-            legend: { display: false },
-            title: {
-              display: true,
-              text: 'Mapa de calor Vm/Vsm'
-            }
+    const ctx = document.getElementById('heatmapCanvas').getContext('2d');
+    new Chart(ctx, {
+      type: 'matrix',
+      data: {
+        datasets: [{
+          label: 'Mapa de calor Vm/Vsm',
+          data: heatData,
+          backgroundColor(ctx) {
+            const value = ctx.dataset.data[ctx.dataIndex].v;
+            if (isNaN(value)) return '#eee';
+            const hue = Math.max(0, Math.min(120, value * 120)); // 0 (rojo) a 120 (verde)
+            return `hsl(${hue}, 80%, 50%)`;
           },
-          scales: {
-            x: {
-              type: 'category',
-              labels: concentraciones,
-              title: { display: true, text: "%SS" }
-            },
-            y: {
-              type: 'category',
-              labels: tuberias,
-              title: { display: true, text: "Tubería" }
+          borderWidth: 1,
+          width: () => 30,
+          height: () => 20
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              title: () => '',
+              label: ctx => `Tubería: ${ctx.raw.y}, %SS: ${ctx.raw.x}, Vm/Vsm: ${ctx.raw.v}`
             }
           }
+        },
+        scales: {
+          x: {
+            type: 'linear',
+            position: 'bottom',
+            title: { display: true, text: '% Sólidos' },
+            ticks: { stepSize: 5 }
+          },
+          y: {
+            type: 'category',
+            labels: tuberias,
+            title: { display: true, text: 'Tubería' }
+          }
         }
-      });
-    }
-
-    // === EJECUCIÓN ===
-    renderizarLineas(data);
-    renderizarTabla(data);
-    renderizarMapaCalor(data);
+      }
+    });
   </script>
 </body>
 </html>
+
 
