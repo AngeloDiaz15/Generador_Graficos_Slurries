@@ -2,88 +2,109 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Gráfico de Sedimentación</title>
+  <title>Gráfico de Cavitación por Tubería</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
     canvas {
-      max-width: 1000px;
-      margin: 20px auto;
-      display: block;
+      width: 100% !important;
+      height: 500px !important;
+    }
+    .filtros {
+      margin-bottom: 20px;
     }
     select {
-      margin: 10px auto;
-      display: block;
+      padding: 5px;
     }
   </style>
 </head>
 <body>
-  <h2>Gráfico de Sedimentación (Vm/Vsm vs. % Sólidos)</h2>
-  <label for="filtroTuberia">Filtrar por tubería:</label>
-  <select id="filtroTuberia" onchange="filtrarTuberia()">
-    <option value="todas">Todas</option>
-  </select>
+  <h2>Cavitación por Tubería: Presión vs. % de Sólidos</h2>
 
-  <canvas id="graficoSedimentacion"></canvas>
+  <div class="filtros">
+    <label for="filtroPresion">Tipo de Presión:</label>
+    <select id="filtroPresion">
+      <option value="min">Mínima (entre In y Out)</option>
+      <option value="PStaticIn">P Static In</option>
+      <option value="PStaticOut">P Static Out</option>
+    </select>
+  </div>
+
+  <canvas id="graficoCavitacion"></canvas>
 
   <script>
-    const coloresBase = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#8B0000', '#228B22'];
+    const datos = JSON.parse(localStorage.getItem("resumenDatos")) || [];
 
-    const datos = JSON.parse(localStorage.getItem('resumenDatos')) || [];
+    const tuberias = [...new Set(datos.map(d => d.Tuberia))].sort();
+    const filtroPresion = document.getElementById("filtroPresion");
 
-    // Reorganiza los datos por tubería
-    const tuberiasMap = {};
-
-    datos.forEach(obj => {
-      const tuberia = obj[0]; // Nombre
-      const Vm_Vsm = parseFloat(obj[5]); // Vm/Vsm
-      const SS = parseFloat(obj[8]); // % sólidos
-
-      if (!tuberiasMap[tuberia]) tuberiasMap[tuberia] = [];
-
-      tuberiasMap[tuberia].push({ x: SS, y: Vm_Vsm });
-    });
-
-    const tuberias = Object.keys(tuberiasMap);
-
-    // Cargar opciones en el select
-    const select = document.getElementById('filtroTuberia');
-    tuberias.forEach(t => {
-      const opt = document.createElement('option');
-      opt.value = t;
-      opt.textContent = t;
-      select.appendChild(opt);
-    });
-
-    const ctx = document.getElementById('graficoSedimentacion').getContext('2d');
+    const colores = [
+      "#e6194b", "#3cb44b", "#ffe119", "#4363d8", "#f58231", "#911eb4",
+      "#46f0f0", "#f032e6", "#bcf60c", "#fabebe", "#008080", "#e6beff",
+      "#9a6324", "#fffac8", "#800000", "#aaffc3", "#808000", "#ffd8b1"
+    ];
 
     let chart;
 
-    function crearGrafico(tuberiasFiltradas) {
-      const datasets = tuberiasFiltradas.map((tuberia, i) => ({
-        label: tuberia,
-        data: tuberiasMap[tuberia].sort((a, b) => a.x - b.x),
-        borderColor: coloresBase[i % coloresBase.length],
+    function actualizarGrafico() {
+      const tipoPresion = filtroPresion.value;
+
+      const datasets = tuberias.map((tub, i) => {
+        const puntos = datos
+          .filter(d => d.Tuberia === tub)
+          .map(d => {
+            let y;
+            if (tipoPresion === "min") {
+              y = Math.min(d.PStaticIn ?? Infinity, d.PStaticOut ?? Infinity);
+            } else {
+              y = d[tipoPresion] ?? null;
+            }
+            return { x: d.SS, y };
+          })
+          .filter(p => p.y !== null);
+
+        return {
+          label: tub,
+          data: puntos.sort((a, b) => a.x - b.x),
+          borderColor: colores[i % colores.length],
+          fill: false,
+          tension: 0.2
+        };
+      });
+
+      datasets.push({
+        label: "Presión de vapor (0.0234 bar)",
+        data: [
+          { x: Math.min(...datos.map(d => d.SS)), y: 0.0234 },
+          { x: Math.max(...datos.map(d => d.SS)), y: 0.0234 }
+        ],
+        borderColor: "red",
+        borderDash: [5, 5],
+        pointRadius: 0,
         fill: false,
-        tension: 0.1
-      }));
+        tension: 0,
+      });
 
+      const ctx = document.getElementById("graficoCavitacion").getContext("2d");
       if (chart) chart.destroy();
-
       chart = new Chart(ctx, {
-        type: 'line',
+        type: "line",
         data: { datasets },
         options: {
           responsive: true,
           plugins: {
-            legend: { display: true }
+            legend: { position: "top" },
           },
           scales: {
             x: {
-              type: 'linear',
-              title: { display: true, text: '% de Sólidos (SS)' }
+              type: "linear",
+              title: { display: true, text: "% de Sólidos (SS)" }
             },
             y: {
-              title: { display: true, text: 'Ratio Vm/Vsm' },
+              title: { display: true, text: "Presión (bar)" },
               min: 0
             }
           }
@@ -91,19 +112,8 @@
       });
     }
 
-    function filtrarTuberia() {
-      const seleccionada = select.value;
-      if (seleccionada === 'todas') {
-        crearGrafico(tuberias);
-      } else {
-        crearGrafico([seleccionada]);
-      }
-    }
-
-    // Crea el gráfico inicial
-    crearGrafico(tuberias);
+    filtroPresion.addEventListener("change", actualizarGrafico);
+    actualizarGrafico();
   </script>
 </body>
 </html>
-
-
