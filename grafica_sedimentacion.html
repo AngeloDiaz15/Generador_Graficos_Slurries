@@ -4,177 +4,193 @@
   <meta charset="UTF-8">
   <title>Visualización de Sedimentación</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@1.3.0/dist/chartjs-chart-matrix.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@1.1.0/dist/chartjs-chart-matrix.min.js"></script>
   <style>
-  body {
-    font-family: Arial, sans-serif;
-    padding: 20px;
-    text-align: center;
-  }
-
-  canvas {
-    display: block;
-    margin: 30px auto;
-    max-width: 100%;
-  }
-
-  #lineChart, #heatmapCanvas {
-    width: 1200px !important;
-    height: 600px !important;
-  }
-
-  table, th, td {
-    border: 1px solid #ccc;
-    border-collapse: collapse;
-    padding: 6px;
-    text-align: center;
-    margin: 20px auto;
-  }
-
-  th {
-    background-color: #f2f2f2;
-  }
-
-  .rojo {
-    background-color: #f8d7da !important;
-    color: #721c24;
-  }
-</style>
-
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+    canvas {
+      margin: 30px 0;
+      border: 1px solid #ccc;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 30px;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 6px;
+      text-align: center;
+    }
+    th {
+      background-color: #f2f2f2;
+    }
+    td.red {
+      background-color: #ffcccc;
+    }
+  </style>
 </head>
 <body>
 
-  <h2>Gráfico de Líneas Múltiples por Tubería</h2>
-  <canvas id="lineChart"></canvas>
+<h2>Gráfico de Líneas Múltiples por Tubería</h2>
+<canvas id="lineChart" width="1200" height="600"></canvas>
 
-  <h2>Tabla Interactiva con Colores</h2>
-  <div id="tablaSedimentacion"></div>
+<h2>Tabla Interactiva de Vm/Vsm</h2>
+<div id="tablaVmVsm"></div>
 
-  <h2>Mapa de Calor de Sedimentación (Vm/Vsm)</h2>
-  <canvas id="heatmapCanvas"></canvas>
+<h2>Mapa de Calor de Sedimentación (Vm/Vsm)</h2>
+<canvas id="heatmapCanvas" width="1200" height="600"></canvas>
 
-  <script>
-    const resumenDatos = JSON.parse(localStorage.getItem('resumenDatos')) || [];
+<script>
+  const datosResumen = JSON.parse(localStorage.getItem('resumenDatos') || "[]");
+  if (datosResumen.length === 0) {
+    document.body.innerHTML = "<h2>Primero genera el resumen desde los resultados en index.html</h2>";
+    throw new Error("No hay datos en localStorage.");
+  }
 
-    if (!resumenDatos.length) {
-      document.body.innerHTML = '<h3 style="color:red;">⚠️ Primero genera el resumen desde index.html</h3>';
-      throw new Error("No hay datos en localStorage.");
-    }
+  const headers = ["Tubería", "P Static In", "P Static Out", "Velocity", "Settling V Max", "Vm/Vsm", "Mass Flow", "Vol Flow", "%SS"];
+  const indices = {
+    tuberia: 0,
+    vmvsm: 5,
+    ss: 8
+  };
 
-    const tuberias = [...new Set(resumenDatos.map(f => f[0]))];
-    const concentraciones = [...new Set(resumenDatos.map(f => parseFloat(f[8])))]
-      .filter(v => !isNaN(v))
-      .sort((a, b) => a - b);
+  const datosPorTuberia = {};
+  const heatmapData = [];
+  const tablaHTML = ['<table><thead><tr><th>Tubería</th><th>%SS</th><th>Vm/Vsm</th></tr></thead><tbody>'];
 
-    // === 1. GRÁFICO DE LÍNEAS MÚLTIPLES ===
-    const datasets = tuberias.map((tubo, i) => {
-      const color = `hsl(${(i * 360 / tuberias.length)}, 70%, 50%)`;
-      return {
-        label: tubo,
-        data: resumenDatos
-          .filter(f => f[0] === tubo && !isNaN(parseFloat(f[5])))
-          .map(f => ({ x: parseFloat(f[8]), y: parseFloat(f[5]) })),
-        borderColor: color,
-        backgroundColor: color,
-        tension: 0.2
-      };
-    });
+  const tuberias = new Set();
+  const ssValues = new Set();
 
-    new Chart(document.getElementById('lineChart').getContext('2d'), {
-      type: 'line',
-      data: { datasets },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        scales: {
-          x: { title: { display: true, text: '% Sólidos' }, type: 'linear' },
-          y: { title: { display: true, text: 'Vm/Vsm' } }
+  for (const fila of datosResumen) {
+    const tub = fila[indices.tuberia];
+    const ss = parseFloat(fila[indices.ss]);
+    const vmvsm = parseFloat(fila[indices.vmvsm]);
+
+    if (isNaN(ss) || isNaN(vmvsm)) continue;
+
+    tuberias.add(tub);
+    ssValues.add(ss);
+
+    // Tabla con color
+    const colorClase = vmvsm < 1 ? ' class="red"' : '';
+    tablaHTML.push(`<tr><td>${tub}</td><td>${ss}</td><td${colorClase}>${vmvsm}</td></tr>`);
+
+    // Dataset para líneas
+    if (!datosPorTuberia[tub]) datosPorTuberia[tub] = [];
+    datosPorTuberia[tub].push({ x: ss, y: vmvsm });
+
+    // Datos para heatmap
+    heatmapData.push({ x: ss, y: tub, v: vmvsm });
+  }
+
+  tablaHTML.push('</tbody></table>');
+  document.getElementById("tablaVmVsm").innerHTML = tablaHTML.join("");
+
+  // --- LÍNEAS MULTIPLES ---
+  const datasets = Object.entries(datosPorTuberia).map(([tub, datos], idx) => {
+    return {
+      label: tub,
+      data: datos.sort((a, b) => a.x - b.x),
+      borderColor: `hsl(${(idx * 37) % 360}, 80%, 50%)`,
+      backgroundColor: `hsl(${(idx * 37) % 360}, 80%, 50%)`,
+      fill: false,
+      tension: 0.1
+    };
+  });
+
+  new Chart(document.getElementById("lineChart").getContext("2d"), {
+    type: "line",
+    data: { datasets },
+    options: {
+      responsive: false,
+      maintainAspectRatio: false,
+      plugins: {
+        title: {
+          display: true,
+          text: 'Vm/Vsm por Tubería y %SS'
+        },
+        legend: {
+          display: true,
+          position: 'right'
+        }
+      },
+      scales: {
+        x: {
+          type: 'linear',
+          title: { display: true, text: '% de Sólidos (%SS)' }
+        },
+        y: {
+          title: { display: true, text: 'Vm/Vsm' }
         }
       }
-    });
+    }
+  });
 
-    // === 2. TABLA INTERACTIVA ===
-    const tabla = document.createElement('table');
-    const cabecera = ['Tubería', ...concentraciones.map(c => `${c}%`)];
-    tabla.innerHTML = '<tr>' + cabecera.map(t => `<th>${t}</th>`).join('') + '</tr>';
+  // --- MAPA DE CALOR ---
+  const ssArray = Array.from(ssValues).sort((a, b) => a - b);
+  const tubArray = Array.from(tuberias).sort();
 
-    tuberias.forEach(tubo => {
-      const fila = document.createElement('tr');
-      fila.innerHTML = `<td>${tubo}</td>`;
-      concentraciones.forEach(c => {
-        const filaData = resumenDatos.find(f => f[0] === tubo && parseFloat(f[8]) === c);
-        const valor = filaData ? parseFloat(filaData[5]) : '';
-        const td = document.createElement('td');
-        td.textContent = valor || '-';
-        if (valor && valor < 1) td.classList.add('rojo');
-        fila.appendChild(td);
-      });
-      tabla.appendChild(fila);
-    });
-    document.getElementById('tablaSedimentacion').appendChild(tabla);
+  const xLabels = ssArray;
+  const yLabels = tubArray;
 
-    // === 3. MAPA DE CALOR ===
-    const heatData = [];
-    tuberias.forEach((t, i) => {
-      concentraciones.forEach((c, j) => {
-        const f = resumenDatos.find(d => d[0] === t && parseFloat(d[8]) === c);
-        if (f) {
-          const valor = parseFloat(f[5]);
-          heatData.push({
-            x: c,
-            y: t,
-            v: valor
-          });
-        }
-      });
-    });
+  const matrixData = heatmapData.map(d => ({
+    x: xLabels.indexOf(d.x),
+    y: yLabels.indexOf(d.y),
+    v: d.v
+  }));
 
-    const ctx = document.getElementById('heatmapCanvas').getContext('2d');
-    new Chart(ctx, {
-      type: 'matrix',
-      data: {
-        datasets: [{
-          label: 'Mapa de calor Vm/Vsm',
-          data: heatData,
-          backgroundColor(ctx) {
-            const value = ctx.dataset.data[ctx.dataIndex].v;
-            if (isNaN(value)) return '#eee';
-            const hue = Math.max(0, Math.min(120, value * 120)); // rojo a verde
-            return `hsl(${hue}, 80%, 50%)`;
-          },
-          borderWidth: 1,
-          width: () => 30,
-          height: () => 20
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { display: false },
-          tooltip: {
-            callbacks: {
-              title: () => '',
-              label: ctx => `Tubería: ${ctx.raw.y}, %SS: ${ctx.raw.x}, Vm/Vsm: ${ctx.raw.v}`
+  new Chart(document.getElementById("heatmapCanvas").getContext("2d"), {
+    type: 'matrix',
+    data: {
+      datasets: [{
+        label: 'Vm/Vsm Heatmap',
+        data: matrixData,
+        backgroundColor(ctx) {
+          const v = ctx.raw.v;
+          return v < 1 ? 'rgba(255, 100, 100, 0.8)' : 'rgba(100, 180, 255, 0.8)';
+        },
+        width: ({ chart }) => chart.chartArea.width / xLabels.length,
+        height: ({ chart }) => chart.chartArea.height / yLabels.length
+      }]
+    },
+    options: {
+      responsive: false,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        title: {
+          display: true,
+          text: 'Mapa de Calor de Vm/Vsm por Tubería y %SS'
+        },
+        tooltip: {
+          callbacks: {
+            title: () => '',
+            label(ctx) {
+              const x = xLabels[ctx.raw.x];
+              const y = yLabels[ctx.raw.y];
+              return `Tubería: ${y}, %SS: ${x}, Vm/Vsm: ${ctx.raw.v}`;
             }
           }
+        }
+      },
+      scales: {
+        x: {
+          type: 'category',
+          labels: xLabels,
+          title: { display: true, text: '% de Sólidos (%SS)' }
         },
-        scales: {
-          x: {
-            type: 'linear',
-            position: 'bottom',
-            title: { display: true, text: '% Sólidos' },
-            ticks: { stepSize: 5 }
-          },
-          y: {
-            type: 'category',
-            labels: tuberias,
-            title: { display: true, text: 'Tubería' }
-          }
+        y: {
+          type: 'category',
+          labels: yLabels,
+          title: { display: true, text: 'Tubería' }
         }
       }
-    });
-  </script>
+    }
+  });
+</script>
 </body>
 </html>
 
