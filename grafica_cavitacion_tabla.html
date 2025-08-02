@@ -30,11 +30,18 @@
   </style>
 </head>
 <body>
-  <h2>Relaciones de Sedimentación por Tubería (Vm/Vsm vs. % Sólidos)</h2>
+  
+  <h2>Gráfico de Cavitación (Presión Estática)</h2>
+
+  <label for="tipoPresion">Tipo de Presión:</label>
+  <select id="tipoPresion">
+    <option value="1">P Static In</option>
+    <option value="2">P Static Out</option>
+  </select>
 
   <label for="filtroTuberia">Filtrar por tubería:</label>
   <select id="filtroTuberia" onchange="filtrarTuberia()">
-    <option value="todas">Todas</option>
+    <option value="Todas">Todas</option>
   </select>
 
   <canvas id="graficoSedimentacion"></canvas>
@@ -50,14 +57,13 @@
 
     datos.forEach(obj => {
       const tuberia = obj[0]; // Nombre
-      const Vm_Vsm = parseFloat(obj[5]); // Vm/Vsm
-      const Vm = parseFloat(obj[3]);     // Vm
-      const Vsm = parseFloat(obj[4]);    // Vsm
+      const In = parseFloat(obj[1]); // Pin
+      const Out = parseFloat(obj[2]);     // Pout
       const SS = parseFloat(obj[8]);     // % sólidos
 
       if (!tuberiasMap[tuberia]) tuberiasMap[tuberia] = [];
 
-      tuberiasMap[tuberia].push({ x: SS, y: Vm_Vsm, vm: Vm, vsm: Vsm });
+      tuberiasMap[tuberia].push({ x: SS, y: Vm_Vsm, in: Im, out: Out });
     });
 
     const tuberias = Object.keys(tuberiasMap);
