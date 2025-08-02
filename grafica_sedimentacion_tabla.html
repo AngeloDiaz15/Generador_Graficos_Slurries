@@ -1,101 +1,95 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <title>Mapa de Calor de Sedimentación</title>
+  <meta charset="UTF-8">
+  <title>Mapa de Calor de Vm/Vsm (Tabla)</title>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      padding: 20px;
-    }
-    h2 {
-      text-align: center;
-    }
     table {
-      width: auto;
       border-collapse: collapse;
-      margin: 0 auto;
+      margin: 20px auto;
+      font-family: Arial, sans-serif;
+      width: 90%;
     }
     th, td {
-      border: 1px solid #ccc;
+      border: 1px solid #999;
       padding: 8px;
       text-align: center;
     }
     th {
-      background-color: #f2f2f2;
+      background-color: #eee;
     }
     .rojo-oscuro {
-      background-color: #8B0000;
+      background-color: #a94442;
       color: white;
     }
     .rojo-claro {
-      background-color: #FF6347;
-      color: white;
+      background-color: #f2dede;
     }
     .naranja {
-      background-color: #FFA500;
-      color: black;
+      background-color: #f0ad4e;
     }
     .amarillo {
-      background-color: #FFFF99;
-      color: black;
+      background-color: #fcf8e3;
     }
   </style>
 </head>
 <body>
-  <h2>Mapa de Calor de Sedimentación (Vm/Vsm)</h2>
-  <div id="tablaCalor"></div>
+  <h2 style="text-align:center">Mapa de Calor de Vm/Vsm por Tubería y %SS</h2>
+  <div id="tabla-container"></div>
 
   <script>
-    // Leer datos desde localStorage
-    const datosResumen = JSON.parse(localStorage.getItem("resumenDatos"));
+    const datos = JSON.parse(localStorage.getItem('resumenDatos')) || [];
 
-    // Agrupar los datos por tubería y %SS
-    const tuberias = [...new Set(datosResumen.map(d => d.Tuberia))];
-    const concentraciones = [...new Set(datosResumen.map(d => d.SS))].sort((a, b) => a - b);
+    // Organizar los datos en un diccionario por tubería
+    const datosPorTuberia = {};
+    const porcentajesSS = new Set();
 
-    // Crear un objeto para mapear los valores Vm/Vsm por tubería y concentración
-    const mapaValores = {};
-    tuberias.forEach(t => mapaValores[t] = {});
+    datos.forEach(fila => {
+      const tuberia = fila[0];
+      const VmVsm = parseFloat(fila[5]);
+      const ss = parseFloat(fila[8]);
 
-    datosResumen.forEach(d => {
-      mapaValores[d.Tuberia][d.SS] = parseFloat(d.Vm_Vsm.toFixed(3));
+      if (!datosPorTuberia[tuberia]) {
+        datosPorTuberia[tuberia] = {};
+      }
+      datosPorTuberia[tuberia][ss] = VmVsm;
+      porcentajesSS.add(ss);
     });
 
-    // Función para asignar clases de color según rango de valor
-    function obtenerClaseColor(valor) {
-      if (valor < 1) return "rojo-oscuro";
-      else if (valor >= 1 && valor <= 1.05) return "rojo-claro";
-      else if (valor > 1.05 && valor <= 1.1) return "naranja";
-      else if (valor > 1.1 && valor <= 1.3) return "amarillo";
-      else return "";
-    }
+    const porcentajesOrdenados = Array.from(porcentajesSS).sort((a, b) => a - b);
 
-    // Crear la tabla HTML
-    const contenedor = document.getElementById("tablaCalor");
-    let tablaHTML = "<table><thead><tr><th>Tubería</th>";
-    concentraciones.forEach(c => {
-      tablaHTML += `<th>${c}% SS</th>`;
+    // Crear tabla
+    let tablaHTML = '<table><thead><tr><th>Tubería</th>';
+    porcentajesOrdenados.forEach(ss => {
+      tablaHTML += `<th>${ss}%</th>`;
     });
-    tablaHTML += "</tr></thead><tbody>";
+    tablaHTML += '</tr></thead><tbody>';
 
-    tuberias.forEach(tub => {
-      tablaHTML += `<tr><th>${tub}</th>`;
-      concentraciones.forEach(c => {
-        const valor = mapaValores[tub][c];
-        if (valor !== undefined) {
-          const clase = obtenerClaseColor(valor);
-          tablaHTML += `<td class="${clase}">${valor}</td>`;
-        } else {
-          tablaHTML += `<td></td>`;
+    Object.keys(datosPorTuberia).forEach(tuberia => {
+      tablaHTML += `<tr><td>${tuberia}</td>`;
+      porcentajesOrdenados.forEach(ss => {
+        const valor = datosPorTuberia[tuberia][ss];
+        let clase = '';
+        let contenido = '-';
+        if (typeof valor === 'number' && !isNaN(valor)) {
+          contenido = valor.toFixed(3);
+          if (valor < 1) {
+            clase = 'rojo-oscuro';
+          } else if (valor >= 1 && valor <= 1.05) {
+            clase = 'rojo-claro';
+          } else if (valor > 1.05 && valor <= 1.1) {
+            clase = 'naranja';
+          } else if (valor > 1.1 && valor <= 1.3) {
+            clase = 'amarillo';
+          }
         }
+        tablaHTML += `<td class="${clase}">${contenido}</td>`;
       });
-      tablaHTML += "</tr>";
+      tablaHTML += '</tr>';
     });
 
-    tablaHTML += "</tbody></table>";
-    contenedor.innerHTML = tablaHTML;
+    tablaHTML += '</tbody></table>';
+    document.getElementById('tabla-container').innerHTML = tablaHTML;
   </script>
 </body>
 </html>
-
