@@ -2,241 +2,198 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Generador de Archivos .fth</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.0/jszip.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <title>Visualización de Sedimentación</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    table, th, td { border: 1px solid black; border-collapse: collapse; padding: 5px; }
+    body { font-family: Arial; margin: 20px; }
+    canvas { max-width: 100%; }
+    table { border-collapse: collapse; margin-top: 20px; }
+    th, td { border: 1px solid #aaa; padding: 5px 10px; text-align: center; }
     th { background-color: #f2f2f2; }
   </style>
 </head>
 <body>
-  <h2>Generador de configuraciones .fth por % de sólidos</h2>
+  <h2>Visualización de Sedimentación</h2>
 
-  <label for="fileInput">Subir archivo .fth:</label>
-  <input type="file" id="fileInput" accept=".fth"><br><br>
+  <h3>Gráfico de Líneas Múltiples (Vm/Vsm según tubería)</h3>
+  <canvas id="graficoLineas" height="300"></canvas>
 
-  <label for="inicio">Desde (%):</label>
-  <input type="number" id="inicio" value="5" min="1" max="100">
-  <label for="fin">Hasta (%):</label>
-  <input type="number" id="fin" value="60" min="1" max="100"><br><br>
+  <h3>Resumen con tabla Interactiva (Rojo si Vm/Vsm &lt; 1)</h3>
+  <div id="tablaSedimentacion"></div>
 
-  <label for="densidad">Densidad del sólido (kg/m³):</label>
-  <input type="number" id="densidad" value="8900" min="1"><br><br>
-
-  <label for="rutaFathom">Ruta de AFT Fathom (Fathom.exe):</label><br>
-  <input type="text" id="rutaFathom" placeholder="C:\\Program Files (x86)\\AFT Products\\AFT Fathom 12\\Fathom.exe" style="width: 500px;"><br><br>
-
-  <button onclick="generarArchivos()">Generar archivos</button><br><br>
-  <a id="descargarZip" style="display:none;">Descargar modelos_generados.zip</a><br><br>
-  <a id="descargarBat" style="display:none;">Descargar ejecutar_modelos.bat</a><br><br>
-  <a id="descargarXLSX" style="display:none;">Descargar tabla_resultados.xlsx</a>
-
-  <div id="tablaResultados" style="margin-top:20px;"></div>
+  <h3>Tendencias con mapa de Calor de Vm/Vsm</h3>
+  <canvas id="mapaCalor" height="400"></canvas>
 
   <script>
-    function generarArchivos() {
-      const input = document.getElementById('fileInput');
-      const desde = parseInt(document.getElementById('inicio').value);
-      const hasta = parseInt(document.getElementById('fin').value);
-      const densidadSolido = parseFloat(document.getElementById('densidad').value);
-      const densidadAgua = 1000;
-      const rutaFathom = document.getElementById('rutaFathom').value.trim();
+    const resumen = JSON.parse(localStorage.getItem("resumenDatos") || "[]");
+    const tuberias = [...new Set(resumen.map(r => r[0]))];
+    const concentraciones = [...new Set(resumen.map(r => r[8]))].sort((a, b) => a - b);
 
-      if (!input.files[0]) {
-        alert('Por favor, sube un archivo .fth primero');
-        return;
+    const datosPorTuberia = {};
+    tuberias.forEach(t => datosPorTuberia[t] = {});
+    resumen.forEach(r => {
+      const [t, , , , , vmvsm, , , ss] = r;
+      if (tuberias.includes(t)) {
+        datosPorTuberia[t][ss] = parseFloat(vmvsm) || 0;
       }
-      if (desde < 1 || hasta > 100 || desde > hasta) {
-        alert('Rango inválido. Asegúrate de que el rango esté entre 1% y 100% y que el inicio no sea mayor al final.');
-        return;
-      }
-      if (!densidadSolido || isNaN(densidadSolido)) {
-        alert('Por favor, ingresa un valor válido de densidad del sólido.');
-        return;
-      }
-      if (!rutaFathom) {
-        alert('Por favor, escribe la ruta de AFT Fathom.');
-        return;
-      }
+    });
 
-      const reader = new FileReader();
-      reader.onload = function(event) {
-        const contenidoOriginal = event.target.result;
-        const zip = new JSZip();
-        const regex_conc = /,2,\d{1,3},Percent/g;
-        const regex_dens = /,1,kg\/m3,1,\d+(\.\d+)?/g;
-        const regex_visco = /,-1,None,0\.001498177,0/g;
-        const regex_autoTransfer = /Auto Transfer Results= 0/g;
-
-        let tabla = '<h3>Resultados calculados:</h3><table><tr><th>%SS</th><th>Densidad Mezcla (kg/m³)</th><th>Conc. Volumen</th><th>Viscosidad (Pa·s)</th></tr>';
-        const datosExcel = [["%SS", "Densidad Mezcla (kg/m³)", "Conc. Volumen", "Viscosidad (Pa·s)"]];
-
-        let nombres = [];
-
-        for (let ss = desde; ss <= hasta; ss += 5) {
-          const fraccionMasa = ss / 100;
-          const densidadMezcla = 1 / ((fraccionMasa / densidadSolido) + ((1 - fraccionMasa) / densidadAgua));
-          const concVolumen = densidadMezcla * (fraccionMasa / densidadSolido);
-          const viscosidad = 0.001 * (1 + (2.5 * concVolumen) + (12.075 * Math.pow(concVolumen, 2)) + (0.00273 * Math.exp(16.6 * concVolumen)));
-
-          tabla += `<tr><td>${ss}</td><td>${densidadMezcla.toFixed(3)}</td><td>${concVolumen.toFixed(5)}</td><td>${viscosidad.toExponential(6)}</td></tr>`;
-          datosExcel.push([ss, parseFloat(densidadMezcla.toFixed(3)), parseFloat(concVolumen.toFixed(5)), parseFloat(viscosidad.toExponential(6))]);
-
-          let modificado = contenidoOriginal.replaceAll(regex_conc, `,2,${ss},Percent`);
-          modificado = modificado.replaceAll(regex_dens, `,1,kg/m3,1,${densidadSolido}`);
-          modificado = modificado.replaceAll(regex_visco, `,-1,None,${viscosidad.toFixed(9)},0`);
-          modificado = modificado.replaceAll(regex_autoTransfer, 'Auto Transfer Results= 1');
-
-          const nombre = `modelo_${ss}`;
-          nombres.push(nombre);
-          zip.file(`${nombre}.fth`, modificado);
-        }
-
-        tabla += '</table>';
-        document.getElementById('tablaResultados').innerHTML = tabla;
-
-        zip.generateAsync({ type: 'blob' })
-          .then(function(content) {
-            const enlace = document.getElementById('descargarZip');
-            enlace.href = URL.createObjectURL(content);
-            enlace.download = 'modelos_generados.zip';
-            enlace.textContent = 'Descargar modelos_generados.zip';
-            enlace.style.display = 'inline';
-          });
-
-        // Crear contenido .bat
-        let bat = `@echo off\nsetlocal enabledelayedexpansion\n\n:: === Ruta a AFT Fathom ===\nset FATHOM_PATH=\"${rutaFathom}\"\n\n:: === Carpeta donde están los modelos .fth ===\nset MODELS_DIR=\"%~dp0modelos_generados\"\n\n:: === Crear carpeta de salida de resultados ===\nset OUTPUT_DIR=\"%~dp0resultados_exportados\"\nif not exist %OUTPUT_DIR% (\n    mkdir %OUTPUT_DIR%\n)\n\necho Ejecutando modelos...\n\n:: === Recorrer cada archivo .fth ===\nfor %%f in (%MODELS_DIR%\\*.fth) do (\n    echo Procesando %%~nxf...\n    %FATHOM_PATH% \"%%f\" /Run /ExportOutput \"%OUTPUT_DIR%\\%%~nf.xlsx\"\n)\n\necho.\necho ✅ Todos los modelos han sido ejecutados y exportados.\npause\n`;
-
-        const blobBat = new Blob([bat], { type: 'text/plain' });
-        const batLink = document.getElementById('descargarBat');
-        batLink.href = URL.createObjectURL(blobBat);
-        batLink.download = 'ejecutar_modelos.bat';
-        batLink.textContent = 'Descargar ejecutar_modelos.bat';
-        batLink.style.display = 'inline';
-
-        // Crear Excel
-        const wb = XLSX.utils.book_new();
-        const ws = XLSX.utils.aoa_to_sheet(datosExcel);
-        XLSX.utils.book_append_sheet(wb, ws, "Resultados");
-        const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-        const blobExcel = new Blob([wbout], { type: 'application/octet-stream' });
-        const excelLink = document.getElementById('descargarXLSX');
-        excelLink.href = URL.createObjectURL(blobExcel);
-        excelLink.download = 'tabla_resultados.xlsx';
-        excelLink.textContent = 'Descargar tabla_resultados.xlsx';
-        excelLink.style.display = 'inline';
-      };
-
-      reader.readAsText(input.files[0]);
+    // ====== GRÁFICO DE LÍNEAS MÚLTIPLES ======
+    function generarColor(i) {
+      const h = (i * 137.508) % 360; // buena dispersión
+      return `hsl(${h}, 70%, 50%)`;
     }
-  </script>
 
-<br>
-<hr>
-<h2>Generar Resumen desde resultados .xlsx</h2>
-<input type="file" id="resultadosInput" multiple accept=".xlsx"><br><br>
-<button onclick="generarResumen()">Generar resumen desde resultados</button>
-<br><br>
-<a id="descargarResumen" style="display:none;">Descargar Resumen.xlsx</a>
-<div id="tablaResumen" style="margin-top:20px;"></div>
+    function crearGraficoLineas() {
+      const datasets = tuberias.map((t, i) => ({
+        label: t,
+        data: concentraciones.map(ss => datosPorTuberia[t][ss] ?? null),
+        fill: false,
+        borderColor: generarColor(i),
+        tension: 0.1
+      }));
 
-<script>
-function generarResumen() {
-  const input = document.getElementById('resultadosInput');
-  if (!input.files.length) {
-    alert('Por favor, selecciona los archivos .xlsx exportados por AFT Fathom.');
-    return;
-  }
-
-  const resumen = [["%SS", "Tuberia", "P Static In", "P Static Out", "Velocity", "Settling Velocity Max", "Vm/Vsm", "Mass Flow Rate", "Vol Flow Slurry"]];
-  let tablaHTML = '<h3>Resumen combinado:</h3><table><tr><th>%SS</th><th>Tuberia</th><th>P Static In</th><th>P Static Out</th><th>Velocity</th><th>Settling Velocity Max</th><th>Vm/Vsm</th><th>Mass Flow Rate</th><th>Vol Flow Slurry</th></tr>';
-
-  let pendientes = input.files.length;
-
-  for (const file of input.files) {
-    const lector = new FileReader();
-    lector.onload = function (e) {
-      const data = new Uint8Array(e.target.result);
-      const workbook = XLSX.read(data, { type: 'array' });
-      const hoja3 = workbook.SheetNames[2];
-      const ws = workbook.Sheets[hoja3];
-      if (!ws) {
-        alert(`El archivo ${file.name} no tiene una tercera hoja.`);
-        return;
-      }
-
-      const getCol = (col) => {
-        const colData = [];
-        let i = 1;
-        while (ws[col + i]) {
-          colData.push(ws[col + i].v);
-          i++;
+      new Chart(document.getElementById("graficoLineas").getContext("2d"), {
+        type: 'line',
+        data: {
+          labels: concentraciones.map(c => c + "%"),
+          datasets: datasets
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { position: 'top' },
+            title: { display: false }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              title: { display: true, text: "Vm/Vsm" }
+            },
+            x: {
+              title: { display: true, text: "%SS" }
+            }
+          }
         }
-        return colData;
-      };
+      });
+    }
 
-      const getColAfterEmpty = (col) => {
-        let i = 1;
-        while (ws[col + i] && ws[col + i].v !== "") i++;
-        i++;
-        const result = [];
-        while (ws[col + i] && ws[col + i].v !== "") {
-          result.push(ws[col + i].v);
-          i++;
+    // ====== TABLA INTERACTIVA ======
+    function crearTabla() {
+      let html = '<table><thead><tr><th>Tubería</th>' +
+        concentraciones.map(c => `<th>${c}%</th>`).join('') +
+        '</tr></thead><tbody>';
+
+      tuberias.forEach(t => {
+        html += `<tr><td>${t}</td>`;
+        concentraciones.forEach(c => {
+          const val = datosPorTuberia[t][c];
+          const color = val < 1 ? ' style="background-color:#f99;"' : '';
+          html += `<td${color}>${val?.toFixed(3) ?? ""}</td>`;
+        });
+        html += '</tr>';
+      });
+      html += '</tbody></table>';
+      document.getElementById('tablaSedimentacion').innerHTML = html;
+    }
+
+    // ====== MAPA DE CALOR ======
+    function crearMapaCalor() {
+      const valores = tuberias.map(t => concentraciones.map(c => datosPorTuberia[t][c] ?? null));
+      const datasets = [{
+        label: "Mapa de calor Vm/Vsm",
+        data: valores.flatMap((row, i) =>
+          row.map((v, j) => ({ x: j, y: i, v }))
+        ).filter(p => p.v !== null),
+        backgroundColor(ctx) {
+          const value = ctx.raw.v;
+          const ratio = Math.min(Math.max((value - 0.5) / 2, 0), 1);
+          const hue = ratio * 120;
+          return `hsl(${hue}, 80%, 50%)`;
+        },
+        borderWidth: 1,
+        borderColor: "#333",
+        width: ({ chart }) => chart.chartArea.width / concentraciones.length - 2,
+        height: ({ chart }) => chart.chartArea.height / tuberias.length - 2,
+      }];
+
+      new Chart(document.getElementById("mapaCalor").getContext("2d"), {
+        type: 'matrix',
+        data: {
+          datasets: datasets
+        },
+        options: {
+          plugins: {
+            tooltip: {
+              callbacks: {
+                title: (items) => {
+                  const i = items[0].raw.y;
+                  const j = items[0].raw.x;
+                  return `${tuberias[i]}, ${concentraciones[j]}%`;
+                },
+                label: (item) => `Vm/Vsm: ${item.raw.v.toFixed(3)}`
+              }
+            },
+            legend: { display: false }
+          },
+          scales: {
+            x: {
+              type: "linear",
+              min: 0,
+              max: concentraciones.length,
+              ticks: {
+                callback: v => concentraciones[v] + "%"
+              },
+              title: { display: true, text: "%SS" }
+            },
+            y: {
+              type: "linear",
+              min: 0,
+              max: tuberias.length,
+              ticks: {
+                callback: v => tuberias[v]
+              },
+              title: { display: true, text: "Tubería" }
+            }
+          }
         }
-        return result;
-      };
+      });
+    }
 
-      const tuberias = getCol("A");
-      const psi = getCol("M");
-      const pso = getCol("N");
-      const velocity = getColAfterEmpty("E");
-      const svmax = getColAfterEmpty("F");
-      const vmvsm = getColAfterEmpty("G");
-      const mfr = getColAfterEmpty("J");
-      const vfs = getColAfterEmpty("K");
+    window.onload = () => {
+      crearGraficoLineas();
+      crearTabla();
 
-      const ss = parseInt(file.name.match(/modelo_(\d+)/)?.[1] || 0);
-      for (let i = 0; i < tuberias.length; i++) {
-        resumen.push([
-          ss,
-          tuberias[i] || '',
-          psi[i] || '',
-          pso[i] || '',
-          velocity[i] || '',
-          svmax[i] || '',
-          vmvsm[i] || '',
-          mfr[i] || '',
-          vfs[i] || ''
-        ]);
+      // Cargar plugin de matrix chart antes de graficar
+      Chart.register({
+        id: 'matrix',
+        beforeInit(chart) {
+          if (chart.config.type === 'matrix') {
+            const matrixController = Chart.controllers.bar.extend({
+              dataElementType: Chart.elements.Rectangle,
+              updateElements(rects, start, count, mode) {
+                for (let i = start; i < start + count; i++) {
+                  const rect = rects[i];
+                  const raw = this.getDataset().data[i];
+                  const vp = this._cachedMeta.vScale.getPixelForValue(raw.y);
+                  const hp = this._cachedMeta.iScale.getPixelForValue(raw.x);
+                  rect.x = hp;
+                  rect.y = vp;
+                  rect.width = this.getDataset().width(this.chart);
+                  rect.height = this.getDataset().height(this.chart);
+                  rect.options.backgroundColor = this.getDataset().backgroundColor({ raw });
+                  rect.options.borderColor = this.getDataset().borderColor;
+                  rect.options.borderWidth = this.getDataset().borderWidth;
+                }
+              }
+            });
+            Chart.controllers.matrix = matrixController;
+          }
+        }
+      });
 
-        tablaHTML += `<tr><td>${ss}</td><td>${tuberias[i] || ''}</td><td>${psi[i] || ''}</td><td>${pso[i] || ''}</td><td>${velocity[i] || ''}</td><td>${svmax[i] || ''}</td><td>${vmvsm[i] || ''}</td><td>${mfr[i] || ''}</td><td>${vfs[i] || ''}</td></tr>`;
-      }
-
-      pendientes--;
-      if (pendientes === 0) {
-        // Mostrar tabla
-        tablaHTML += '</table>';
-        document.getElementById('tablaResumen').innerHTML = tablaHTML;
-
-        // Descargar Excel
-        const wb = XLSX.utils.book_new();
-        const ws = XLSX.utils.aoa_to_sheet(resumen);
-        XLSX.utils.book_append_sheet(wb, ws, "Resumen");
-        const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-        const blobResumen = new Blob([wbout], { type: 'application/octet-stream' });
-        const resumenLink = document.getElementById('descargarResumen');
-        resumenLink.href = URL.createObjectURL(blobResumen);
-        resumenLink.download = 'Resumen.xlsx';
-        resumenLink.textContent = 'Descargar Resumen.xlsx';
-        resumenLink.style.display = 'inline';
-      }
+      crearMapaCalor();
     };
-    lector.readAsArrayBuffer(file);
-  }
-}
-</script>
-  
+  </script>
 </body>
 </html>
