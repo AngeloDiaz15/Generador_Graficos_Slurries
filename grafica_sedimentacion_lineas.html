@@ -1,115 +1,155 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Gráfica de Sedimentación</title>
+  <meta charset="UTF-8">
+  <title>Gráfico de Sedimentación</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      padding: 20px;
-    }
     canvas {
-      max-width: 100%;
-      height: auto;
+      max-width: 1000px;
+      margin: 20px auto;
+      display: block;
     }
-    h2 {
-      text-align: center;
-      margin-bottom: 30px;
+    .filtro-tuberias {
+      max-width: 1000px;
+      margin: 10px auto;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: center;
+    }
+    label {
+      font-family: sans-serif;
+      font-size: 14px;
     }
   </style>
 </head>
 <body>
-  <h2>Evaluación de Sedimentación por Tubería</h2>
-  <canvas id="graficoSedimentacion" width="800" height="400"></canvas>
+  <h2 style="text-align:center;">Gráfico de sedimentación (Vm/Vsm vs %SS)</h2>
+  <div class="filtro-tuberias" id="filtroTuberias"></div>
+  <canvas id="graficoSedimentacion"></canvas>
 
   <script>
-    window.onload = function () {
-      const datos = JSON.parse(localStorage.getItem("resumenDatos")) || [];
+    const resumen = JSON.parse(localStorage.getItem("resumenDatos") || "[]");
 
-      // Agrupar datos por tubería y %SS
-      const tuberias = {};  // { 'P8 (Pipe)': { 10: 0.95, 20: 0.98, ... }, ... }
-      datos.forEach(d => {
-        const nombre = d.Pipe;
-        const ss = parseFloat(d.SS);
-        const vm_vsm = parseFloat(d.Vm_Vsm);
+    if (!resumen.length) {
+      alert("No hay datos en localStorage.");
+    } else {
+      // Organiza los datos por tubería
+      const datosPorTuberia = {};
 
-        if (!tuberias[nombre]) {
-          tuberias[nombre] = {};
+      resumen.forEach(item => {
+        const tuberia = item[0];
+        const SS = parseFloat(item[8]);
+        const VmVsm = parseFloat(item[5]);
+
+        if (!datosPorTuberia[tuberia]) {
+          datosPorTuberia[tuberia] = [];
         }
-        tuberias[nombre][ss] = vm_vsm;
+
+        datosPorTuberia[tuberia].push({ SS, VmVsm });
       });
 
-      // Obtener todos los %SS únicos ordenados
-      const porcentajesSS = [...new Set(datos.map(d => parseFloat(d.SS)))].sort((a, b) => a - b);
-
-      // Crear datasets por cada tubería
-      const datasets = Object.entries(tuberias).map(([nombre, valoresPorSS]) => {
-        return {
-          label: nombre,
-          data: porcentajesSS.map(ss => valoresPorSS[ss] ?? null),
-          borderWidth: 2,
-          fill: false,
-          tension: 0.3,
-          borderColor: getColor(nombre),
-        };
+      // Asegura orden por SS en cada serie
+      Object.values(datosPorTuberia).forEach(serie => {
+        serie.sort((a, b) => a.SS - b.SS);
       });
 
-      // Configurar gráfico
-      const ctx = document.getElementById("graficoSedimentacion").getContext("2d");
-      new Chart(ctx, {
-        type: "line",
+      // Colores limitados (se repiten si hay más tuberías)
+      const colores = [
+        'rgba(75, 192, 192, 1)',
+        'rgba(255, 99, 132, 1)',
+        'rgba(54, 162, 235, 1)',
+        'rgba(255, 206, 86, 1)',
+        'rgba(153, 102, 255, 1)',
+        'rgba(255, 159, 64, 1)',
+        'rgba(0, 200, 83, 1)',
+        'rgba(121, 85, 72, 1)'
+      ];
+
+      const datasets = [];
+      const tuberias = Object.keys(datosPorTuberia);
+
+      tuberias.forEach((tuberia, index) => {
+        datasets.push({
+          label: tuberia,
+          data: datosPorTuberia[tuberia].map(p => ({ x: p.SS, y: p.VmVsm })),
+          borderColor: colores[index % colores.length],
+          backgroundColor: colores[index % colores.length],
+          tension: 0.2,
+          hidden: false
+        });
+      });
+
+      // Crear checkboxes para filtrar
+      const filtroDiv = document.getElementById("filtroTuberias");
+      tuberias.forEach((tuberia, i) => {
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.checked = true;
+        checkbox.id = `chk_${i}`;
+
+        checkbox.addEventListener("change", () => {
+          chart.data.datasets[i].hidden = !checkbox.checked;
+          chart.update();
+        });
+
+        const label = document.createElement("label");
+        label.htmlFor = `chk_${i}`;
+        label.textContent = tuberia;
+
+        const container = document.createElement("div");
+        container.appendChild(checkbox);
+        container.appendChild(label);
+
+        filtroDiv.appendChild(container);
+      });
+
+      // Crear el gráfico
+      const ctx = document.getElementById('graficoSedimentacion').getContext('2d');
+      const chart = new Chart(ctx, {
+        type: 'line',
         data: {
-          labels: porcentajesSS,
           datasets: datasets
         },
         options: {
           responsive: true,
-          interaction: {
-            mode: 'nearest',
-            axis: 'x',
-            intersect: false
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: context => {
+                  return `Tubería: ${context.dataset.label}, Vm/Vsm: ${context.parsed.y.toFixed(4)}, %SS: ${context.parsed.x}`;
+                }
+              }
+            },
+            title: {
+              display: true,
+              text: 'Relación Vm/Vsm según concentración de sólidos',
+              font: { size: 18 }
+            }
           },
           scales: {
             x: {
               title: {
                 display: true,
-                text: "% de Sólidos"
+                text: '% Sólidos en masa'
               }
             },
             y: {
               title: {
                 display: true,
-                text: "Vm/Vsm"
+                text: 'Vm / Vsm'
               },
-              min: 0
-            }
-          },
-          plugins: {
-            legend: {
-              position: 'bottom'
-            },
-            tooltip: {
-              mode: 'index',
-              intersect: false
+              min: 0,
+              suggestedMax: 2
             }
           }
         }
       });
-
-      // Función para asignar colores únicos
-      function getColor(nombre) {
-        const colores = [
-          "#0074D9", "#FF4136", "#2ECC40", "#FF851B", "#B10DC9",
-          "#7FDBFF", "#39CCCC", "#01FF70", "#85144b", "#F012BE",
-          "#3D9970", "#111111", "#AAAAAA", "#FFDC00", "#001f3f"
-        ];
-        const idx = Object.keys(tuberias).indexOf(nombre) % colores.length;
-        return colores[idx];
-      }
-    };
+    }
   </script>
 </body>
 </html>
+
 
