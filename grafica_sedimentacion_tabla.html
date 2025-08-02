@@ -2,8 +2,12 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <title>Mapa de Calor (Tabla)</title>
+  <title>Mapa de Calor - Tendencia</title>
   <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+    }
     table {
       border-collapse: collapse;
       width: 100%;
@@ -32,11 +36,23 @@
     .amarillo {
       background-color: #FFFF99;
     }
+    #botones {
+      margin-top: 10px;
+      margin-bottom: 20px;
+    }
   </style>
 </head>
 <body>
-  <h2>Mapa de Calor - Vm/Vsm</h2>
+  <h2>Tendencia de Sedimentación (Vm/Vsm) con Mapa de Calor</h2>
+
+  <div id="botones">
+    <button onclick="descargarComoImagen()">Guardar como imagen (JPG)</button>
+  </div>
+
   <div id="tablaCalor"></div>
+
+  <!-- html2canvas desde CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
   <script>
     const resumenDatos = JSON.parse(localStorage.getItem("resumenDatos")) || [];
@@ -98,6 +114,18 @@
 
     tabla.appendChild(tbody);
     document.getElementById("tablaCalor").appendChild(tabla);
+
+    // Función para descargar la tabla como imagen JPG
+    function descargarComoImagen() {
+      const tablaElemento = document.getElementById("tablaCalor");
+      html2canvas(tablaElemento).then(canvas => {
+        const link = document.createElement("a");
+        link.download = "mapa_calor.jpg";
+        link.href = canvas.toDataURL("image/jpeg", 1.0); // JPG en alta calidad
+        link.click();
+      });
+    }
   </script>
 </body>
 </html>
+
