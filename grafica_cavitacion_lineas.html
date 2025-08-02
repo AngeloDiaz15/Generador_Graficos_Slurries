@@ -56,13 +56,21 @@
       const tipoPresion = parseInt(tipoPresionSelect.value); // 1 o 2
 
       const datosFiltrados = datos
-        .filter(d => d[0] === tuberiaSeleccionada)
-        .map(d => ({
-          x: parseFloat(d[8]), // %SS
-          y: parseFloat(d[tipoPresion]) // P Static In (1) o Out (2)
-        }))
-        .filter(d => !isNaN(d.x) && !isNaN(d.y))
-        .sort((a, b) => a.x - b.x);
+      .filter(d => d[0] === tuberiaSeleccionada)
+      .map(d => {
+        const ssRaw = d[8];
+        const ss = parseFloat(String(ssRaw).replace(',', '.').replace(/[^\d.-]/g, '')); // Elimina símbolos extraños
+        const y = parseFloat(d[tipoPresion]);
+
+        console.log("Procesando:", { tubería: d[0], ssRaw, ss, presion: y });
+
+        return {
+          x: ss,
+          y: y
+        };
+      })
+      .filter(d => !isNaN(d.x) && !isNaN(d.y))
+      .sort((a, b) => a.x - b.x);
 
       const data = {
         datasets: [{
