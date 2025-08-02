@@ -65,12 +65,13 @@
 
       datosFiltrados.forEach(d => {
         const tuberia = d[0];
-        const SS = parseFloat(d[8]);
-        const presion = parseFloat(d[tipoPresion]);
+        const ss = parseFloat(d[8].toString().replace(",", ".").trim());
+        const presion = parseFloat(d[tipoPresion].toString().replace(",", ".").trim());
 
         if (!datosPorTuberia[tuberia]) datosPorTuberia[tuberia] = [];
-        datosPorTuberia[tuberia].push({ x: SS , y: presion });
+        datosPorTuberia[tuberia].push({ x: ss, y: presion });
       });
+
 
       const datasets = Object.entries(datosPorTuberia).map(([nombre, puntos]) => ({
         label: nombre,
