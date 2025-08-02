@@ -2,182 +2,192 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <title>Visualización de Sedimentación</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Gráficas de Sedimentación</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     body {
       font-family: Arial, sans-serif;
-      margin: 20px;
+      margin: 30px;
     }
-    canvas {
-      width: 100% !important;
-      height: 500px !important;
+
+    #grafico {
+      width: 100%;
+      height: 500px;
     }
+
+    .tabla-container {
+      overflow-x: auto;
+      margin-top: 50px;
+    }
+
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      max-width: 100%;
+    }
+
+    th, td {
+      border: 1px solid #999;
+      padding: 8px;
+      text-align: center;
+    }
+
+    .rojo-oscuro { background-color: #8B0000; color: white; }
+    .rojo-claro { background-color: #FF6347; color: white; }
+    .naranja { background-color: #FFA500; }
+    .amarillo { background-color: #FFFF99; }
+
     #mensajes {
       margin-top: 20px;
       font-size: 14px;
     }
-    #tablaCalor {
-      margin-top: 50px;
-      border-collapse: collapse;
-      width: 100%;
-    }
-    #tablaCalor th, #tablaCalor td {
-      border: 1px solid #ddd;
-      padding: 8px;
-      text-align: center;
-    }
-    #tablaCalor th {
-      background-color: #f2f2f2;
-      position: sticky;
-      top: 0;
-      z-index: 1;
-    }
-    .rojo-oscuro { background-color: #8B0000; color: white; }
-    .rojo-claro { background-color: #FF6347; color: black; }
-    .naranja { background-color: #FFA500; color: black; }
-    .amarillo { background-color: #FFFF66; color: black; }
   </style>
 </head>
 <body>
+  <h2>Gráfico Línea: Vm/Vsm por Tubería</h2>
+  <div>
+    <label for="tuberiaSelect">Selecciona una tubería:</label>
+    <select id="tuberiaSelect"></select>
+  </div>
+  <canvas id="grafico"></canvas>
+  <div id="mensajes"></div>
 
-<h2>Gráfico de líneas - Vm/Vsm vs % Sólidos</h2>
-<canvas id="graficoLinea"></canvas>
-<div id="mensajes"></div>
+  <h2 style="margin-top: 60px;">Mapa de Calor (Tabla)</h2>
+  <div class="tabla-container">
+    <table id="tablaHeatmap"></table>
+  </div>
 
-<h2>Mapa de Calor - Vm/Vsm</h2>
-<table id="tablaCalor"></table>
+  <script>
+    const resumenDatos = JSON.parse(localStorage.getItem('resumenDatos'));
 
-<script>
-  const datos = JSON.parse(localStorage.getItem('resumenDatos'));
-  if (!datos || !Array.isArray(datos)) {
-    document.body.innerHTML = '<p>Error: No se encontraron datos en localStorage bajo la clave "resumenDatos".</p>';
-    throw new Error("Datos no encontrados");
-  }
+    const tuberias = [...new Set(resumenDatos.map(item => item.Tuberia))];
+    const porcentajes = [...new Set(resumenDatos.map(item => item["%SS"]))].sort((a, b) => a - b);
 
-  const datosPorTuberia = {};
-  const ssUnicos = new Set();
+    // Gráfico de líneas
+    const tuberiaSelect = document.getElementById('tuberiaSelect');
+    const mensajesDiv = document.getElementById('mensajes');
+    const ctx = document.getElementById('grafico').getContext('2d');
 
-  datos.forEach(d => {
-    if (!d.Tuberia || d.Vm_Vsm === undefined || d.SS === undefined) return;
-    if (!datosPorTuberia[d.Tuberia]) datosPorTuberia[d.Tuberia] = {};
-    datosPorTuberia[d.Tuberia][d.SS] = d.Vm_Vsm;
-    ssUnicos.add(d.SS);
-  });
-
-  const ssOrdenados = Array.from(ssUnicos).sort((a, b) => a - b);
-
-  // === Gráfico de líneas ===
-  const colores = ['#FF6384', '#36A2EB', '#FFCE56', '#8A2BE2', '#3CB371', '#DC143C', '#00CED1', '#FFA07A', '#20B2AA'];
-  const datasets = Object.entries(datosPorTuberia).map(([tuberia, valores], i) => ({
-    label: tuberia,
-    data: ssOrdenados.map(ss => valores[ss]),
-    borderColor: colores[i % colores.length],
-    fill: false
-  }));
-
-  const ctx = document.getElementById('graficoLinea').getContext('2d');
-  const chart = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: ssOrdenados,
-      datasets: datasets
-    },
-    options: {
-      responsive: true,
-      plugins: {
-        legend: {
-          position: 'right'
-        },
-        annotation: {
-          annotations: {
-            lineaReferencia: {
-              type: 'line',
-              yMin: 1,
-              yMax: 1,
-              borderColor: 'red',
-              borderWidth: 2,
-              label: {
-                content: 'Vm/Vsm = 1',
-                enabled: true,
-                position: 'start'
-              }
-            }
-          }
-        }
-      },
-      scales: {
-        y: {
-          beginAtZero: true,
-          title: {
-            display: true,
-            text: 'Vm/Vsm'
-          }
-        },
-        x: {
-          title: {
-            display: true,
-            text: '% Sólidos'
-          }
-        }
-      }
-    }
-  });
-
-  // === Mensajes debajo del gráfico ===
-  const mensajesDiv = document.getElementById('mensajes');
-  datos.forEach(d => {
-    if (d.Vm_Vsm < 1) {
-      const msg = `La velocidad en la tubería "${d.Tuberia}" (${d.Velocity?.toFixed(2)} m/s) es menor que la velocidad de sedimentación (${d.SettlingVMax?.toFixed(2)} m/s) a una concentración de sólido de ${d.SS}%.`;
-      const p = document.createElement('p');
-      p.textContent = msg;
-      mensajesDiv.appendChild(p);
-    }
-  });
-
-  // === Mapa de calor tipo tabla ===
-  const tabla = document.getElementById('tablaCalor');
-  const headerRow = document.createElement('tr');
-  headerRow.appendChild(document.createElement('th')).textContent = 'Tubería';
-  ssOrdenados.forEach(ss => {
-    const th = document.createElement('th');
-    th.textContent = ss + '%';
-    headerRow.appendChild(th);
-  });
-  tabla.appendChild(headerRow);
-
-  Object.entries(datosPorTuberia).forEach(([tuberia, valores]) => {
-    const row = document.createElement('tr');
-    const th = document.createElement('th');
-    th.textContent = tuberia;
-    row.appendChild(th);
-
-    ssOrdenados.forEach(ss => {
-      const td = document.createElement('td');
-      const valor = valores[ss];
-      if (valor !== undefined) {
-        td.textContent = valor.toFixed(2);
-        if (valor < 1) {
-          td.className = 'rojo-oscuro';
-        } else if (valor <= 1.05) {
-          td.className = 'rojo-claro';
-        } else if (valor <= 1.1) {
-          td.className = 'naranja';
-        } else if (valor <= 1.3) {
-          td.className = 'amarillo';
-        }
-      } else {
-        td.textContent = '-';
-      }
-      row.appendChild(td);
+    tuberias.forEach(tub => {
+      const option = document.createElement('option');
+      option.value = tub;
+      option.textContent = tub;
+      tuberiaSelect.appendChild(option);
     });
 
-    tabla.appendChild(row);
-  });
-</script>
+    let chart;
 
-//<!-- Chart.js Annotation plugin -->
-<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@1.4.0"></script>
+    function actualizarGrafico(tuberia) {
+      const datosTuberia = resumenDatos.filter(d => d.Tuberia === tuberia).sort((a, b) => a["%SS"] - b["%SS"]);
+      const data = {
+        labels: datosTuberia.map(d => d["%SS"]),
+        datasets: [{
+          label: `Vm/Vsm - ${tuberia}`,
+          data: datosTuberia.map(d => d["Vm/Vsm"]),
+          borderColor: 'blue',
+          tension: 0.2,
+          fill: false
+        }, {
+          label: 'Referencia = 1',
+          data: datosTuberia.map(() => 1),
+          borderColor: 'red',
+          borderDash: [5, 5],
+          pointRadius: 0,
+          tension: 0
+        }]
+      };
+
+      const config = {
+        type: 'line',
+        data: data,
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'right'
+            }
+          },
+          scales: {
+            x: { title: { display: true, text: '% de Sólidos' } },
+            y: { title: { display: true, text: 'Vm/Vsm' } }
+          }
+        }
+      };
+
+      if (chart) chart.destroy();
+      chart = new Chart(ctx, config);
+
+      // Mensajes
+      mensajesDiv.innerHTML = '';
+      datosTuberia.forEach(d => {
+        const valor = d["Vm/Vsm"];
+        const vsm = d["Velocidad de sedimentación"];
+        const vm = d["Velocidad"];
+        const ss = d["%SS"];
+
+        if (valor !== undefined && valor < 1) {
+          const msg = `La velocidad en la tubería "${d.Tuberia}" (${vm?.toFixed(2)} m/s) es menor que la velocidad de sedimentación (${vsm?.toFixed(2)} m/s) a una concentración de sólido de ${ss}%.<br>`;
+          mensajesDiv.innerHTML += msg;
+        }
+      });
+    }
+
+    tuberiaSelect.addEventListener('change', (e) => {
+      actualizarGrafico(e.target.value);
+    });
+
+    actualizarGrafico(tuberias[0]);
+
+    // === Tabla Heatmap ===
+    const tabla = document.getElementById('tablaHeatmap');
+
+    // Crear encabezado
+    const headerRow = document.createElement('tr');
+    const thVacio = document.createElement('th');
+    thVacio.textContent = "Tubería / %SS";
+    headerRow.appendChild(thVacio);
+    porcentajes.forEach(p => {
+      const th = document.createElement('th');
+      th.textContent = `${p}%`;
+      headerRow.appendChild(th);
+    });
+    tabla.appendChild(headerRow);
+
+    // Crear filas por tubería
+    tuberias.forEach(tub => {
+      const row = document.createElement('tr');
+      const th = document.createElement('th');
+      th.textContent = tub;
+      row.appendChild(th);
+
+      porcentajes.forEach(p => {
+        const cell = document.createElement('td');
+        const valorObj = resumenDatos.find(d => d.Tuberia === tub && d["%SS"] === p);
+        const valor = valorObj?.["Vm/Vsm"];
+
+        if (valor !== undefined) {
+          cell.textContent = valor.toFixed(2);
+          if (valor < 1) {
+            cell.classList.add("rojo-oscuro");
+          } else if (valor <= 1.05) {
+            cell.classList.add("rojo-claro");
+          } else if (valor <= 1.1) {
+            cell.classList.add("naranja");
+          } else if (valor <= 1.3) {
+            cell.classList.add("amarillo");
+          }
+        } else {
+          cell.textContent = "-";
+        }
+
+        row.appendChild(cell);
+      });
+
+      tabla.appendChild(row);
+    });
+  </script>
 </body>
 </html>
 
