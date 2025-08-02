@@ -20,10 +20,14 @@
     button {
       margin-left: 10px;
     }
+    #mensajesAdvertencia {
+      margin-top: 20px;
+      color: red;
+    }
   </style>
 </head>
 <body>
-  <h2>Presión Estática vs % Sólidos por tubería</h2>
+  <h2>Presión Estática vs % Sólidos</h2>
 
   <div id="controls">
     <label for="tuberiaSelect">Tubería:</label>
@@ -43,6 +47,9 @@
 
   <canvas id="graficoCavitacion"></canvas>
 
+  <!-- 🔴 Mensajes de advertencia -->
+  <div id="mensajesAdvertencia"></div>
+
   <script>
     const datos = JSON.parse(localStorage.getItem('resumenDatos')) || [];
 
@@ -50,8 +57,8 @@
     const tuberiaSelect = document.getElementById('tuberiaSelect');
     const tipoPresionSelect = document.getElementById('tipoPresion');
     const ctx = document.getElementById('graficoCavitacion').getContext('2d');
+    const mensajesDiv = document.getElementById('mensajesAdvertencia');
 
-    // Agrega las tuberías al select
     tuberiasUnicas.forEach(t => {
       const option = document.createElement('option');
       option.value = t;
@@ -66,7 +73,7 @@
       const tipoPresion = parseInt(tipoPresionSelect.value);
 
       const datasets = [];
-
+      const mensajes = []; // 🔴 Lista de advertencias
       const tuberiasAFiltrar = tuberiaSeleccionada === '__all__' ? tuberiasUnicas : [tuberiaSeleccionada];
 
       tuberiasAFiltrar.forEach((tuberia, index) => {
@@ -76,6 +83,15 @@
             const ssRaw = d[8];
             const ss = parseFloat(String(ssRaw).replace(',', '.').replace(/[^\d.-]/g, ''));
             const y = parseFloat(d[tipoPresion]);
+
+            // 🔴 Verifica presión menor a 0.0234
+            if (!isNaN(ss) && !isNaN(y) && y < 0.0234) {
+              const mensaje = tipoPresion === 1
+                ? `La presión estática a la entrada (${y.toFixed(4)} bar) en la tubería "${tuberia}" es menor a la presión de vapor (0.0234 bares) a una concentración de sólidosdel ${ss}%`
+                : `La presión estática a la salida (${y.toFixed(4)} bar) en la tubería "${tuberia}" es menor a la presión de vapor (0.0234 bares) a una concentración de sólidos del ${ss}%`;
+              mensajes.push(mensaje);
+            }
+
             return { x: ss, y: y };
           })
           .filter(d => !isNaN(d.x) && !isNaN(d.y))
@@ -126,9 +142,7 @@
             }
           },
           plugins: {
-            legend: {
-              display: true
-            },
+            legend: { display: true },
             tooltip: {
               callbacks: {
                 label: function(context) {
@@ -157,14 +171,24 @@
 
       if (chart) chart.destroy();
       chart = new Chart(ctx, config);
+
+      // 🔴 Mostrar mensajes de advertencia
+      mensajesDiv.innerHTML = '';
+      if (mensajes.length > 0) {
+        const ul = document.createElement('ul');
+        mensajes.forEach(m => {
+          const li = document.createElement('li');
+          li.textContent = m;
+          ul.appendChild(li);
+        });
+        mensajesDiv.appendChild(ul);
+      }
     }
 
-    // Función para restaurar zoom
     function restaurarZoom() {
       if (chart) chart.resetZoom();
     }
 
-    // Función para descargar gráfico
     function descargarGrafico() {
       const enlace = document.createElement('a');
       enlace.href = chart.toBase64Image();
@@ -172,7 +196,6 @@
       enlace.click();
     }
 
-    // Función para colores
     function getColor(index, alpha = 1) {
       const colores = ['#007bff', '#28a745', '#ffc107', '#dc3545', '#17a2b8', '#6f42c1', '#fd7e14'];
       const color = colores[index % colores.length];
