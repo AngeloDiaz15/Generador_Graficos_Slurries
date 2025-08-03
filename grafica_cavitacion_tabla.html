@@ -33,64 +33,90 @@
 
   <div id="tablaContainer"></div>
 
-  <script>
-    function generarTabla() {
-      const resumenDatos = JSON.parse(localStorage.getItem("resumenDatos") || "[]");
-      const tipoPresion = document.getElementById("tipoPresion").value;
-      const presionVapor = parseFloat(document.getElementById("presionVapor").value);
+<script>
+  const resumenDatos = JSON.parse(localStorage.getItem("resumenDatos")) || [];
 
-      const datosPorTuberia = {};
+  function generarTabla() {
+    const tipoPresion = document.getElementById("tipoPresion").value;
+    const presionVapor = parseFloat(document.getElementById("presionVapor").value);
+    const datosPorTuberia = {};
 
-      resumenDatos.forEach(fila => {
-        const tuberia = fila[0];
-        const ss = parseFloat(fila[8]);
+    resumenDatos.forEach(fila => {
+      const tuberia = fila[0];
+      const ss = parseFloat(fila[8]);
 
-        const pin = parseFloat(String(fila[1]).replace(/[^\d.-]/g, ''));
-        const pout = parseFloat(String(fila[2]).replace(/[^\d.-]/g, ''));
+      const pin = parseFloat(String(fila[1]).replace(/[^\d.-]/g, ''));
+      const pout = parseFloat(String(fila[2]).replace(/[^\d.-]/g, ''));
 
-        let valor = null;
-        if (tipoPresion === "entrada") valor = pin;
-        else if (tipoPresion === "salida") valor = pout;
-        else if (tipoPresion === "minima") valor = Math.min(pin, pout);
+      let valor = null;
+      if (tipoPresion === "entrada") valor = pin;
+      else if (tipoPresion === "salida") valor = pout;
+      else if (tipoPresion === "minima") valor = Math.min(pin, pout);
 
-        if (!datosPorTuberia[tuberia]) datosPorTuberia[tuberia] = {};
-        datosPorTuberia[tuberia][ss] = valor;
+      if (!datosPorTuberia[tuberia]) datosPorTuberia[tuberia] = {};
+      datosPorTuberia[tuberia][ss] = valor;
+    });
+
+    const ssUnicos = [...new Set(resumenDatos.map(fila => parseFloat(fila[8])))].sort((a, b) => a - b);
+    const tuberias = Object.keys(datosPorTuberia);
+
+    const tabla = document.createElement("table");
+
+    const thead = document.createElement("thead");
+    const filaEncabezado = document.createElement("tr");
+    filaEncabezado.innerHTML = "<th>Tubería</th>";
+    ssUnicos.forEach(ss => {
+      filaEncabezado.innerHTML += `<th>${ss}%</th>`;
+    });
+    thead.appendChild(filaEncabezado);
+    tabla.appendChild(thead);
+
+    const tbody = document.createElement("tbody");
+    tuberias.forEach(tuberia => {
+      const fila = document.createElement("tr");
+      fila.innerHTML = `<td>${tuberia}</td>`;
+
+      ssUnicos.forEach(ss => {
+        const valor = datosPorTuberia[tuberia][ss];
+        let clase = "blanco";
+        let texto = "";
+
+        if (valor !== undefined && !isNaN(valor)) {
+          texto = valor.toFixed(4);
+          if (valor < presionVapor) clase = "rojo-oscuro";
+          else if (valor === presionVapor || (valor < 1 && valor > presionVapor)) clase = "rojo-claro";
+          else if (valor >= 1 && valor <= 5) clase = "naranja";
+          else if (valor > 5 && valor < 15) clase = "amarillo";
+        }
+
+        fila.innerHTML += `<td class="${clase}">${texto}</td>`;
       });
 
-      const tuberias = Object.keys(datosPorTuberia).sort();
-      const porcentajes = [...new Set(resumenDatos.map(f => parseFloat(f[8])))].sort((a, b) => a - b);
+      tbody.appendChild(fila);
+    });
 
-      let tablaHTML = "<table><thead><tr><th>Tubería</th>";
-      porcentajes.forEach(ss => tablaHTML += `<th>${ss}%</th>`);
-      tablaHTML += "</tr></thead><tbody>";
+    tabla.appendChild(tbody);
 
-      tuberias.forEach(tuberia => {
-        tablaHTML += `<tr><td>${tuberia}</td>`;
-        porcentajes.forEach(ss => {
-          const valor = datosPorTuberia[tuberia][ss];
-          let clase = "";
+    const tablaContenedor = document.getElementById("tablaCalor");
+    tablaContenedor.innerHTML = ""; // limpia anterior
+    tablaContenedor.appendChild(tabla);
+  }
 
-          if (valor < presionVapor) clase = "rojo";
-          else if (Math.abs(valor - presionVapor) < 0.00001 || (valor < 1 && valor > presionVapor)) clase = "rojo-claro";
-          else if (valor < 1.5) clase = "amarillo";
-          else clase = "verde";
+  function descargarComoImagen() {
+    const tablaElemento = document.getElementById("tablaCalor");
+    html2canvas(tablaElemento).then(canvas => {
+      const link = document.createElement("a");
+      link.download = "mapa_calor.jpg";
+      link.href = canvas.toDataURL("image/jpeg", 1.0);
+      link.click();
+    });
+  }
 
-          tablaHTML += `<td class="${clase}">${valor?.toFixed(3) ?? "-"}</td>`;
-        });
-        tablaHTML += "</tr>";
-      });
+  // Render inicial
+  generarTabla();
+</script>
 
-      tablaHTML += "</tbody></table>";
-      document.getElementById("tablaContainer").innerHTML = tablaHTML;
-    }
-
-    // Auto-generar la tabla al cargar si hay datos
-    window.onload = () => {
-      if (localStorage.getItem("resumenDatos")) {
-        generarTabla();
-      }
-    };
-  </script>
+  
 </body>
 </html>
 
