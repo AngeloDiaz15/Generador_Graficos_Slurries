@@ -83,10 +83,10 @@
 
   <div id="leyenda">
     <h4>Leyenda de Colores:</h4>
-    <div class="leyenda-item"><span class="leyenda-color rojo-oscuro"></span> &lt; Presión de vapor</div>
-    <div class="leyenda-item"><span class="leyenda-color rojo-claro"></span> = Presión de vapor y &lt; 1</div>
-    <div class="leyenda-item"><span class="leyenda-color naranja"></span> 1 a 5</div>
-    <div class="leyenda-item"><span class="leyenda-color amarillo"></span> &gt; 5 y &lt; 15</div>
+    <div class="leyenda-item"><span class="leyenda-color rojo-oscuro"></span> &lt; Presión de vapor </div>
+    <div class="leyenda-item"><span class="leyenda-color rojo-claro"></span> [Presión de vapor, 1] </div>
+    <div class="leyenda-item"><span class="leyenda-color naranja"></span> &lt;1, 5] </div>
+    <div class="leyenda-item"><span class="leyenda-color amarillo"></span> &lt;5, 15] </div>
     <div class="leyenda-item"><span class="leyenda-color blanco" style="border:1px solid #ccc;"></span> Otros</div>
   </div>
 
@@ -143,9 +143,9 @@
           if (valor !== undefined && !isNaN(valor)) {
             texto = valor.toFixed(4);
             if (valor < presionVapor) clase = "rojo-oscuro";
-            else if (valor === presionVapor || (valor < 1 && valor > presionVapor)) clase = "rojo-claro";
-            else if (valor >= 1 && valor <= 5) clase = "naranja";
-            else if (valor > 5 && valor < 15) clase = "amarillo";
+            else if (valor === presionVapor || (valor <= 1 && valor > presionVapor)) clase = "rojo-claro";
+            else if (valor > 1 && valor <= 5) clase = "naranja";
+            else if (valor > 5 && valor <= 15) clase = "amarillo";
           }
 
           fila.innerHTML += `<td class="${clase}">${texto}</td>`;
