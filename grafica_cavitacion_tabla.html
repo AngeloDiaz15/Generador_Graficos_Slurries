@@ -2,112 +2,53 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <title>Mapa de Calor - Cavitación</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Tabla de Cavitación</title>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      padding: 20px;
-    }
-    table {
-      border-collapse: collapse;
-      width: 100%;
-      text-align: center;
-      margin-top: 20px;
-    }
-    th, td {
-      border: 1px solid #ddd;
-      padding: 8px;
-      min-width: 80px;
-    }
-    th {
-      background-color: #f2f2f2;
-    }
-    .rojo-oscuro {
-      background-color: #8B0000;
-      color: white;
-    }
-    .rojo-claro {
-      background-color: #FF6347;
-      color: white;
-    }
-    .naranja {
-      background-color: #FFA500;
-    }
-    .amarillo {
-      background-color: #FFFF99;
-    }
-    .blanco {
-      background-color: #ffffff;
-    }
-    #botones, #controles {
-      margin: 15px 0;
-    }
-    #leyenda {
-      margin-top: 20px;
-    }
-    .leyenda-item {
-      display: inline-block;
-      margin-right: 20px;
-    }
-    .leyenda-color {
-      display: inline-block;
-      width: 20px;
-      height: 20px;
-      vertical-align: middle;
-      margin-right: 5px;
-    }
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+    th { background-color: #f2f2f2; }
+    .rojo { background-color: #ff4d4d; color: white; }
+    .rojo-claro { background-color: #ff9999; }
+    .amarillo { background-color: #ffff99; }
+    .verde { background-color: #ccffcc; }
+    input, select { margin: 5px; padding: 5px; }
   </style>
 </head>
 <body>
-  <h2>Mapa de Calor de Presión Estática</h2>
+  <h2>Visualización de Cavitación</h2>
 
-  <div id="controles">
-    <label for="tipoPresion">Tipo de presión:</label>
-    <select id="tipoPresion">
-      <option value="entrada">P Estática Entrada</option>
-      <option value="salida">P Estática Salida</option>
-      <option value="minima">Mínima (Entrada / Salida)</option>
-    </select>
+  <label for="tipoPresion">Tipo de presión a mostrar:</label>
+  <select id="tipoPresion">
+    <option value="entrada">Presión de Entrada</option>
+    <option value="salida">Presión de Salida</option>
+    <option value="minima">Presión Mínima</option>
+  </select>
 
-    <label for="presionVapor">Presión de vapor (bar):</label>
-    <input type="number" id="presionVapor" step="0.0001" value="0.0234" />
+  <label for="presionVapor">Presión de vapor [bar]:</label>
+  <input type="number" id="presionVapor" value="0.0234" step="0.0001" />
 
-    <button onclick="generarTabla()">Filtrar</button>
-  </div>
+  <button onclick="generarTabla()">Generar tabla</button>
 
-  <div id="botones">
-    <button onclick="descargarComoImagen()">Guardar como imagen (JPG)</button>
-  </div>
-
-  <div id="tablaCalor"></div>
-
-  <div id="leyenda">
-    <h4>Leyenda de Colores:</h4>
-    <div class="leyenda-item"><span class="leyenda-color rojo-oscuro"></span> &lt; Presión de vapor</div>
-    <div class="leyenda-item"><span class="leyenda-color rojo-claro"></span> = Presión de vapor y &lt; 1</div>
-    <div class="leyenda-item"><span class="leyenda-color naranja"></span> 1 a 5</div>
-    <div class="leyenda-item"><span class="leyenda-color amarillo"></span> &gt; 5 y &lt; 15</div>
-    <div class="leyenda-item"><span class="leyenda-color blanco" style="border:1px solid #ccc;"></span> Otros</div>
-  </div>
-
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <div id="tablaContainer"></div>
 
   <script>
-    const resumenDatos = JSON.parse(localStorage.getItem("resumenDatos")) || [];
-
     function generarTabla() {
+      const resumenDatos = JSON.parse(localStorage.getItem("resumenDatos") || "[]");
       const tipoPresion = document.getElementById("tipoPresion").value;
       const presionVapor = parseFloat(document.getElementById("presionVapor").value);
+
       const datosPorTuberia = {};
 
       resumenDatos.forEach(fila => {
         const tuberia = fila[0];
         const ss = parseFloat(fila[8]);
+
+        const pin = parseFloat(String(fila[1]).replace(/[^\d.-]/g, ''));
+        const pout = parseFloat(String(fila[2]).replace(/[^\d.-]/g, ''));
+
         let valor = null;
-
-        const pin = parseFloat(fila[1]);
-        const pout = parseFloat(fila[2]);
-
         if (tipoPresion === "entrada") valor = pin;
         else if (tipoPresion === "salida") valor = pout;
         else if (tipoPresion === "minima") valor = Math.min(pin, pout);
@@ -116,65 +57,42 @@
         datosPorTuberia[tuberia][ss] = valor;
       });
 
-      const ssUnicos = [...new Set(resumenDatos.map(fila => parseFloat(fila[8])))].sort((a, b) => a - b);
-      const tuberias = Object.keys(datosPorTuberia);
+      const tuberias = Object.keys(datosPorTuberia).sort();
+      const porcentajes = [...new Set(resumenDatos.map(f => parseFloat(f[8])))].sort((a, b) => a - b);
 
-      const tabla = document.createElement("table");
+      let tablaHTML = "<table><thead><tr><th>Tubería</th>";
+      porcentajes.forEach(ss => tablaHTML += `<th>${ss}%</th>`);
+      tablaHTML += "</tr></thead><tbody>";
 
-      const thead = document.createElement("thead");
-      const filaEncabezado = document.createElement("tr");
-      filaEncabezado.innerHTML = "<th>Tubería</th>";
-      ssUnicos.forEach(ss => {
-        filaEncabezado.innerHTML += `<th>${ss}%</th>`;
-      });
-      thead.appendChild(filaEncabezado);
-      tabla.appendChild(thead);
-
-      const tbody = document.createElement("tbody");
       tuberias.forEach(tuberia => {
-        const fila = document.createElement("tr");
-        fila.innerHTML = `<td>${tuberia}</td>`;
-
-        ssUnicos.forEach(ss => {
+        tablaHTML += `<tr><td>${tuberia}</td>`;
+        porcentajes.forEach(ss => {
           const valor = datosPorTuberia[tuberia][ss];
-          let clase = "blanco";
-          let texto = "";
+          let clase = "";
 
-          if (valor !== undefined && !isNaN(valor)) {
-            texto = valor.toFixed(4);
-            if (valor < presionVapor) clase = "rojo-oscuro";
-            else if (valor === presionVapor || (valor < 1 && valor > presionVapor)) clase = "rojo-claro";
-            else if (valor >= 1 && valor <= 5) clase = "naranja";
-            else if (valor > 5 && valor < 15) clase = "amarillo";
-          }
+          if (valor < presionVapor) clase = "rojo";
+          else if (Math.abs(valor - presionVapor) < 0.00001 || (valor < 1 && valor > presionVapor)) clase = "rojo-claro";
+          else if (valor < 1.5) clase = "amarillo";
+          else clase = "verde";
 
-          fila.innerHTML += `<td class="${clase}">${texto}</td>`;
+          tablaHTML += `<td class="${clase}">${valor?.toFixed(3) ?? "-"}</td>`;
         });
-
-        tbody.appendChild(fila);
+        tablaHTML += "</tr>";
       });
 
-      tabla.appendChild(tbody);
-
-      const tablaContenedor = document.getElementById("tablaCalor");
-      tablaContenedor.innerHTML = ""; // limpia anterior
-      tablaContenedor.appendChild(tabla);
+      tablaHTML += "</tbody></table>";
+      document.getElementById("tablaContainer").innerHTML = tablaHTML;
     }
 
-    function descargarComoImagen() {
-      const tablaElemento = document.getElementById("tablaCalor");
-      html2canvas(tablaElemento).then(canvas => {
-        const link = document.createElement("a");
-        link.download = "mapa_calor.jpg";
-        link.href = canvas.toDataURL("image/jpeg", 1.0);
-        link.click();
-      });
-    }
-
-    // Render inicial
-    generarTabla();
+    // Auto-generar la tabla al cargar si hay datos
+    window.onload = () => {
+      if (localStorage.getItem("resumenDatos")) {
+        generarTabla();
+      }
+    };
   </script>
 </body>
 </html>
+
 
 
