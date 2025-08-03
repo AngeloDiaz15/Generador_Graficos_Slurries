@@ -54,7 +54,7 @@
       else if (tipoPresion === "minima") valor = Math.min(pin, pout);
 
       if (!datosPorTuberia[tuberia]) datosPorTuberia[tuberia] = {};
-      datosPorTuberia[tuberia][ss] = valor;
+    datosPorTuberia[tuberia][ss] = valor;
     });
 
     const ssUnicos = [...new Set(resumenDatos.map(fila => parseFloat(fila[8])))].sort((a, b) => a - b);
@@ -78,15 +78,15 @@
 
       ssUnicos.forEach(ss => {
         const valor = datosPorTuberia[tuberia][ss];
-        let clase = "blanco";
+        let clase = "";
         let texto = "";
 
         if (valor !== undefined && !isNaN(valor)) {
           texto = valor.toFixed(4);
-          if (valor < presionVapor) clase = "rojo-oscuro";
+          if (valor < presionVapor) clase = "rojo";
           else if (valor === presionVapor || (valor < 1 && valor > presionVapor)) clase = "rojo-claro";
-          else if (valor >= 1 && valor <= 5) clase = "naranja";
-          else if (valor > 5 && valor < 15) clase = "amarillo";
+          else if (valor >= 1 && valor <= 5) clase = "amarillo";
+          else clase = "verde";
         }
 
         fila.innerHTML += `<td class="${clase}">${texto}</td>`;
@@ -97,7 +97,7 @@
 
     tabla.appendChild(tbody);
 
-    const tablaContenedor = document.getElementById("tablaCalor");
+    const tablaContenedor = document.getElementById("tablaContainer"); // 🔧 corregido
     tablaContenedor.innerHTML = ""; // limpia anterior
     tablaContenedor.appendChild(tabla);
   }
