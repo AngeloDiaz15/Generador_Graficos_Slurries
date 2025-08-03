@@ -1,169 +1,180 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <title>Relaciones de Sedimentación en Tuberías</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@1.1.0"></script>
+  <meta charset="UTF-8" />
+  <title>Mapa de Calor - Cavitación</title>
   <style>
     body {
       font-family: Arial, sans-serif;
-      margin: 20px;
+      padding: 20px;
     }
-    canvas {
-      width: 100% !important;
-      height: 600px !important;
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      text-align: center;
+      margin-top: 20px;
     }
-    select {
-      margin: 10px auto;
-      display: block;
+    th, td {
+      border: 1px solid #ddd;
+      padding: 8px;
+      min-width: 80px;
     }
-    #mensajes {
-      margin-top: 30px;
-      padding: 10px;
-      border-top: 2px solid #ccc;
+    th {
+      background-color: #f2f2f2;
     }
-    #mensajes p {
-      margin: 5px 0;
-      color: #b30000;
+    .rojo-oscuro {
+      background-color: #8B0000;
+      color: white;
+    }
+    .rojo-claro {
+      background-color: #FF6347;
+      color: white;
+    }
+    .naranja {
+      background-color: #FFA500;
+    }
+    .amarillo {
+      background-color: #FFFF99;
+    }
+    .blanco {
+      background-color: #ffffff;
+    }
+    #botones, #controles {
+      margin: 15px 0;
+    }
+    #leyenda {
+      margin-top: 20px;
+    }
+    .leyenda-item {
+      display: inline-block;
+      margin-right: 20px;
+    }
+    .leyenda-color {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      vertical-align: middle;
+      margin-right: 5px;
     }
   </style>
 </head>
 <body>
-  
-  <h2>Gráfico de Cavitación (Presión Estática)</h2>
+  <h2>Mapa de Calor de Presión Estática</h2>
 
-  <label for="tipoPresion">Tipo de Presión:</label>
-  <select id="tipoPresion">
-    <option value="1">P Static In</option>
-    <option value="2">P Static Out</option>
-  </select>
+  <div id="controles">
+    <label for="tipoPresion">Tipo de presión:</label>
+    <select id="tipoPresion">
+      <option value="entrada">P Estática Entrada</option>
+      <option value="salida">P Estática Salida</option>
+      <option value="minima">Mínima (Entrada / Salida)</option>
+    </select>
 
-  <label for="filtroTuberia">Filtrar por tubería:</label>
-  <select id="filtroTuberia" onchange="filtrarTuberia()">
-    <option value="Todas">Todas</option>
-  </select>
+    <label for="presionVapor">Presión de vapor (bar):</label>
+    <input type="number" id="presionVapor" step="0.0001" value="0.0234" />
 
-  <canvas id="graficoCavitacion"></canvas>
+    <button onclick="generarTabla()">Filtrar</button>
+  </div>
 
-  <div id="mensajes"></div>
+  <div id="botones">
+    <button onclick="descargarComoImagen()">Guardar como imagen (JPG)</button>
+  </div>
+
+  <div id="tablaCalor"></div>
+
+  <div id="leyenda">
+    <h4>Leyenda de Colores:</h4>
+    <div class="leyenda-item"><span class="leyenda-color rojo-oscuro"></span> &lt; Presión de vapor</div>
+    <div class="leyenda-item"><span class="leyenda-color rojo-claro"></span> = Presión de vapor y &lt; 1</div>
+    <div class="leyenda-item"><span class="leyenda-color naranja"></span> 1 a 5</div>
+    <div class="leyenda-item"><span class="leyenda-color amarillo"></span> &gt; 5 y &lt; 15</div>
+    <div class="leyenda-item"><span class="leyenda-color blanco" style="border:1px solid #ccc;"></span> Otros</div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
   <script>
-    const coloresBase = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#8B0000', '#228B22'];
+    const resumenDatos = JSON.parse(localStorage.getItem("resumenDatos")) || [];
 
-    const datos = JSON.parse(localStorage.getItem('resumenDatos')) || [];
+    function generarTabla() {
+      const tipoPresion = document.getElementById("tipoPresion").value;
+      const presionVapor = parseFloat(document.getElementById("presionVapor").value);
+      const datosPorTuberia = {};
 
-    const tuberiasMap = {};
+      resumenDatos.forEach(fila => {
+        const tuberia = fila[0];
+        const ss = parseFloat(fila[8]);
+        let valor = null;
 
-    datos.forEach(obj => {
-      const tuberia = obj[0]; // Nombre
-      const In = parseFloat(obj[1]); // Pin
-      const Out = parseFloat(obj[2]);     // Pout
-      const SS = parseFloat(obj[8]);     // % sólidos
+        const pin = parseFloat(fila[1]);
+        const pout = parseFloat(fila[2]);
 
-      if (!tuberiasMap[tuberia]) tuberiasMap[tuberia] = [];
+        if (tipoPresion === "entrada") valor = pin;
+        else if (tipoPresion === "salida") valor = pout;
+        else if (tipoPresion === "minima") valor = Math.min(pin, pout);
 
-      tuberiasMap[tuberia].push({ x: SS, y: Vm_Vsm, in: Im, out: Out });
-    });
-
-    const tuberias = Object.keys(tuberiasMap);
-
-    const select = document.getElementById('filtroTuberia');
-    tuberias.forEach(t => {
-      const opt = document.createElement('option');
-      opt.value = t;
-      opt.textContent = t;
-      select.appendChild(opt);
-    });
-
-    const ctx = document.getElementById('graficoCavitacion').getContext('2d');
-    let chart;
-
-    function crearGrafico(tuberiasFiltradas) {
-      const datasets = tuberiasFiltradas.map((tuberia, i) => ({
-        label: tuberia,
-        data: tuberiasMap[tuberia].map(p => ({ x: p.x, y: p.y })),
-        borderColor: coloresBase[i % coloresBase.length],
-        fill: false,
-        tension: 0.1
-      }));
-
-      if (chart) chart.destroy();
-
-      chart = new Chart(ctx, {
-        type: 'line',
-        data: { datasets },
-        options: {
-          responsive: true,
-          plugins: {
-            legend: {
-              position: 'right',
-              labels: {
-                boxWidth: 20
-              }
-            },
-            annotation: {
-              annotations: {
-                lineaReferencia: {
-                  type: 'line',
-                  yMin: 1,
-                  yMax: 1,
-                  borderColor: 'red',
-                  borderWidth: 2,
-                  label: {
-                    content: 'Vm/Vsm = 1',
-                    enabled: true,
-                    position: 'end'
-                  }
-                }
-              }
-            }
-          },
-          scales: {
-            x: {
-              type: 'linear',
-              title: { display: true, text: '% de Sólidos (SS)' }
-            },
-            y: {
-              title: { display: true, text: 'Ratio Vm/Vsm' },
-              min: 0
-            }
-          }
-        }
+        if (!datosPorTuberia[tuberia]) datosPorTuberia[tuberia] = {};
+        datosPorTuberia[tuberia][ss] = valor;
       });
 
-      mostrarMensajes(tuberiasFiltradas);
-    }
+      const ssUnicos = [...new Set(resumenDatos.map(fila => parseFloat(fila[8])))].sort((a, b) => a - b);
+      const tuberias = Object.keys(datosPorTuberia);
 
-    function mostrarMensajes(tuberiasFiltradas) {
-      const contenedor = document.getElementById('mensajes');
-      contenedor.innerHTML = '';
+      const tabla = document.createElement("table");
 
-      tuberiasFiltradas.forEach(tuberia => {
-        const puntos = tuberiasMap[tuberia];
-        puntos.forEach(p => {
-          if (p.y < 1) {
-            const mensaje = `La velocidad en la tubería "${tuberia}" (${p.vm.toFixed(2)} m/s) es menor que la velocidad de sedimentación (${p.vsm.toFixed(2)} m/s) a una concentración de sólido de ${p.x.toFixed(1)}%.`;
-            const pElem = document.createElement('p');
-            pElem.textContent = mensaje;
-            contenedor.appendChild(pElem);
+      const thead = document.createElement("thead");
+      const filaEncabezado = document.createElement("tr");
+      filaEncabezado.innerHTML = "<th>Tubería</th>";
+      ssUnicos.forEach(ss => {
+        filaEncabezado.innerHTML += `<th>${ss}%</th>`;
+      });
+      thead.appendChild(filaEncabezado);
+      tabla.appendChild(thead);
+
+      const tbody = document.createElement("tbody");
+      tuberias.forEach(tuberia => {
+        const fila = document.createElement("tr");
+        fila.innerHTML = `<td>${tuberia}</td>`;
+
+        ssUnicos.forEach(ss => {
+          const valor = datosPorTuberia[tuberia][ss];
+          let clase = "blanco";
+          let texto = "";
+
+          if (valor !== undefined && !isNaN(valor)) {
+            texto = valor.toFixed(4);
+            if (valor < presionVapor) clase = "rojo-oscuro";
+            else if (valor === presionVapor || (valor < 1 && valor > presionVapor)) clase = "rojo-claro";
+            else if (valor >= 1 && valor <= 5) clase = "naranja";
+            else if (valor > 5 && valor < 15) clase = "amarillo";
           }
+
+          fila.innerHTML += `<td class="${clase}">${texto}</td>`;
         });
+
+        tbody.appendChild(fila);
+      });
+
+      tabla.appendChild(tbody);
+
+      const tablaContenedor = document.getElementById("tablaCalor");
+      tablaContenedor.innerHTML = ""; // limpia anterior
+      tablaContenedor.appendChild(tabla);
+    }
+
+    function descargarComoImagen() {
+      const tablaElemento = document.getElementById("tablaCalor");
+      html2canvas(tablaElemento).then(canvas => {
+        const link = document.createElement("a");
+        link.download = "mapa_calor.jpg";
+        link.href = canvas.toDataURL("image/jpeg", 1.0);
+        link.click();
       });
     }
 
-    function filtrarTuberia() {
-      const seleccionada = select.value;
-      if (seleccionada === 'todas') {
-        crearGrafico(tuberias);
-      } else {
-        crearGrafico([seleccionada]);
-      }
-    }
-
-    // Crear gráfico inicial
-    crearGrafico(tuberias);
+    // Render inicial
+    generarTabla();
   </script>
 </body>
 </html>
+
 
