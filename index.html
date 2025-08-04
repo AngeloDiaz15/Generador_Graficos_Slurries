@@ -40,12 +40,12 @@
       const hasta = parseInt(document.getElementById('fin').value);
       const densidadSolido = parseFloat(document.getElementById('densidad').value);
       const densidadAgua = 1000;
-      const rutaFathom = document.getElementById('rutaFathom').value.trim();
+      
 
       if (!input.files[0]) return alert('Por favor, sube un archivo .fth primero');
       if (desde < 1 || hasta > 100 || desde > hasta) return alert('Rango inválido.');
       if (!densidadSolido || isNaN(densidadSolido)) return alert('Densidad inválida.');
-      if (!rutaFathom) return alert('Escribe la ruta de AFT Fathom.');
+  
 
       const reader = new FileReader();
       reader.onload = function(event) {
@@ -90,14 +90,7 @@
           enlace.style.display = 'inline';
         });
 
-        const bat = `@echo off\nsetlocal enabledelayedexpansion\nset FATHOM_PATH=\"${rutaFathom}\"\nset MODELS_DIR=\"%~dp0modelos_generados\"\nset OUTPUT_DIR=\"%~dp0resultados_exportados\"\nif not exist %OUTPUT_DIR% ( mkdir %OUTPUT_DIR% )\necho Ejecutando modelos...\nfor %%f in (%MODELS_DIR%\\*.fth) do ( echo Procesando %%~nxf... & %FATHOM_PATH% \"%%f\" /Run /ExportOutput \"%OUTPUT_DIR%\\%%~nf.xlsx\" )\necho.\necho ✅ Finalizado.\npause\n`;
-
-        const blobBat = new Blob([bat], { type: 'text/plain' });
-        const batLink = document.getElementById('descargarBat');
-        batLink.href = URL.createObjectURL(blobBat);
-        batLink.download = 'ejecutar_modelos.bat';
-        batLink.textContent = 'Descargar ejecutar_modelos.bat';
-        batLink.style.display = 'inline';
+        
 
         const wb = XLSX.utils.book_new();
         const ws = XLSX.utils.aoa_to_sheet(datosExcel);
